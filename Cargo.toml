@@ -1,6 +1,6 @@
 [package]
 name = "cutemonitor"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
@@ -8,7 +8,7 @@ chrono = "0.4.42"
 iced = { version = "0.12", features = ["advanced", "canvas", "image", "tokio"] }
 sysinfo = "0.37.2"
 tokio = { version = "1", features = ["full"] }
-windows = { version = "0.52", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.52", features = ["Win32_System_Registry", "Win32_Foundation", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Security"] }
 regex = "1"
 gfxinfo = "0.1.2"
 machine-info = "1.0.9"

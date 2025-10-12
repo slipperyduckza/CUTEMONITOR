@@ -7,9 +7,8 @@ use iced::{
 use iced::widget::{button, canvas, container, tooltip, tooltip::Position, Canvas, Image};
 use iced::advanced::image::Handle;
 // Import sysinfo to get system information like CPU usage
-use sysinfo::{System, ProcessesToUpdate};
-// Import HashMap for process history
-use std::collections::HashMap;
+use sysinfo::System;
+
 // Import gfxinfo for GPU information
 use gfxinfo::active_gpu;
 // Import machine-info for GPU usage
@@ -22,6 +21,7 @@ use windows::Win32::System::Registry::{
 use windows::Win32::UI::Shell::{ShellExecuteW, IsUserAnAdmin};
 // Import for hiding console window
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
+
 
 // Import for subscription recipe
 use iced::advanced::subscription::Recipe;
@@ -136,6 +136,8 @@ fn parse_temp(s: &str) -> Option<f32> {
 fn is_admin() -> bool {
     unsafe { IsUserAnAdmin().as_bool() }
 }
+
+
 
 // Struct to hold the CPU usage data for drawing the overlaid bars
 #[derive(Debug)]
@@ -427,28 +429,16 @@ impl Recipe for GfxMonitor {
 }
 
 // Recipe for top processes monitoring subscription
-#[derive(Clone)]
-enum Phase {
-    Initial,
-    Collecting,
-}
-
 struct TopProcessesMonitor {
-    history: HashMap<String, Vec<f32>>,
     update_count: usize,
-    phase: Phase,
-    initial_top: Vec<String>,
-    last_averaged: Option<Vec<String>>,
+    last_top: Vec<String>,
 }
 
 impl Default for TopProcessesMonitor {
     fn default() -> Self {
         Self {
-            history: HashMap::new(),
             update_count: 0,
-            phase: Phase::Initial,
-            initial_top: vec![],
-            last_averaged: None,
+            last_top: vec![],
         }
     }
 }
@@ -466,64 +456,36 @@ impl Recipe for TopProcessesMonitor {
         _input: BoxStream<'static, (event::Event, event::Status)>,
     ) -> BoxStream<'static, Self::Output> {
         let stream = stream::unfold(self, |mut monitor| async {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await; // Update every 0.2 seconds for 30 updates = 6 seconds
-            let mut sys = System::new_all();
-            sys.refresh_processes(ProcessesToUpdate::All, true);
-            let system_processes = [
-                "System", "System Idle Process", "csrss.exe", "wininit.exe", "services.exe",
-                "lsass.exe", "winlogon.exe", "smss.exe", "svchost.exe", "explorer.exe",
-                "dwm.exe", "taskhostw.exe", "sihost.exe", "fontdrvhost.exe", "ctfmon.exe",
-                "SearchIndexer.exe", "SearchHost.exe", "RuntimeBroker.exe", "StartMenuExperienceHost.exe",
-                "ShellExperienceHost.exe", "ApplicationFrameHost.exe", "TextInputHost.exe",
-                "LockApp.exe", "WWAHost.exe", "MicrosoftEdge.exe", "MicrosoftEdgeCP.exe",
-                "MicrosoftEdgeSH.exe", "msedge.exe", "msedgewebview2.exe", "cutemonitor.exe", "conhost.exe", "eServiceHost.exe", "eOppFrame.exe"
-            ];
-            let user_processes: Vec<_> = sys.processes().iter()
-                .filter(|(_, p)| !system_processes.contains(&p.name().to_string_lossy().as_ref()))
-                .collect();
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await; // Update every 1 second
+            monitor.update_count += 1;
 
-            let mut sorted_processes = user_processes.clone();
-            sorted_processes.sort_by(|a, b| b.1.cpu_usage().partial_cmp(&a.1.cpu_usage()).unwrap_or(std::cmp::Ordering::Equal));
+            let top_names = if monitor.update_count >= 6 {
+                // Use PowerShell to get top 3 processes by CPU
+                let output = tokio::process::Command::new("powershell")
+                    .arg("-Command")
+                    .arg(r"Get-Process | Where-Object { $_.CPU -ne $null -and $_.Name -notmatch '^(System|Idle|csrss|wininit|services|lsass|winlogon|smss|svchost|explorer|dwm|taskhostw|sihost|fontdrvhost|ctfmon|SearchIndexer|SearchHost|RuntimeBroker|StartMenuExperienceHost|ShellExperienceHost|ApplicationFrameHost|TextInputHost|LockApp|WWAHost|MicrosoftEdge|msedge|msedgewebview2|conhost|eServiceHost|eOppFrame|LibreHardwareService|wlanext|ngclso|UserOOBEBroker|dllhost|SystemSettings|ShellHost|cutemonitor|tui-jfedab57)$' } | Sort-Object -Property CPU -Descending | Select-Object -First 3 -Property @{Name='DisplayName'; Expression={if ($_.Description) {$_.Description} else {$_.Name}}} | Format-Table -HideTableHeaders")
+                    .creation_flags(CREATE_NO_WINDOW.0)
+                    .output()
+                    .await;
 
-            let top_names = match monitor.phase.clone() {
-                Phase::Initial => {
-                    // Show current top 3 once
-                    let top = sorted_processes.iter().take(3).map(|(_, p)| p.name().to_string_lossy().to_string()).collect::<Vec<_>>();
-                    monitor.initial_top = top.clone();
-                    monitor.phase = Phase::Collecting;
-                    top
-                }
-                Phase::Collecting => {
-                    // Collect top 20 processes' usages
-                    for (_, p) in sorted_processes.iter().take(20) {
-                        let name = p.name().to_string_lossy().to_string();
-                        let usage = p.cpu_usage();
-                        monitor.history.entry(name).or_insert_with(Vec::new).push(usage);
-                    }
-                    monitor.update_count += 1;
-                    if monitor.update_count >= 30 {
-                        // Evaluate top 3 on average
-                        let mut averages: Vec<(String, f32)> = monitor.history.iter()
-                            .map(|(name, usages)| {
-                                let avg = usages.iter().sum::<f32>() / usages.len() as f32;
-                                (name.clone(), avg)
-                            })
-                            .collect();
-                        averages.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-                        let result = averages.into_iter().take(3).map(|(name, _)| name).collect::<Vec<_>>();
-                        monitor.last_averaged = Some(result.clone());
-                        // Flush data and restart
-                        monitor.history.clear();
-                        monitor.update_count = 0;
-                        result
-                    } else {
-                        // Show last averaged if available, else initial top
-                        monitor.last_averaged.as_ref().unwrap_or(&monitor.initial_top).clone()
-                    }
-                }
+                let current_top = if let Ok(output) = output {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    stdout.lines()
+                        .map(|line| line.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![]
+                };
+
+                monitor.last_top = current_top.clone();
+                monitor.update_count = 0;
+                current_top
+            } else {
+                monitor.last_top.clone()
             };
 
-            Some((Message::UpdateTopProcesses(top_names), monitor))
+            Some((Message::UpdateTopProcesses(top_names), monitor)) // count not used now
         });
         Box::pin(stream)
     }
