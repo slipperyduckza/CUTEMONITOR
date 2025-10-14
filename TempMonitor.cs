@@ -1,25 +1,58 @@
 using LibreHardwareMonitor.Hardware;
+using System.Diagnostics;
 
-Computer computer = new Computer
+partial class Program
 {
-    IsCpuEnabled = true
-};
-
-computer.Open();
-
-foreach (IHardware hardware in computer.Hardware)
-{
-    if (hardware.HardwareType == HardwareType.Cpu)
+    static void Main()
     {
-        hardware.Update();
-        foreach (ISensor sensor in hardware.Sensors)
+        var process = Process.Start(new ProcessStartInfo
         {
-            if (sensor.SensorType == SensorType.Temperature)
+            FileName = "dotnet",
+            Arguments = "--list-runtimes",
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        });
+        if (process != null)
+        {
+            process.WaitForExit();
+            string output = process.StandardOutput.ReadToEnd();
+            if (!output.Contains("Microsoft.NETCore.App 8."))
             {
-                Console.WriteLine($"{sensor.Name}: {sensor.Value}°C");
+                var installProcess = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "winget",
+                    Arguments = "install dotnet-runtime-8",
+                    UseShellExecute = true
+                });
+                if (installProcess != null)
+                {
+                    installProcess.WaitForExit();
+                }
             }
         }
+
+        Computer computer = new Computer
+        {
+            IsCpuEnabled = true
+        };
+
+        computer.Open();
+
+        foreach (IHardware hardware in computer.Hardware)
+        {
+            if (hardware.HardwareType == HardwareType.Cpu)
+            {
+                hardware.Update();
+                foreach (ISensor sensor in hardware.Sensors)
+                {
+                    if (sensor.SensorType == SensorType.Temperature)
+                    {
+                        Console.WriteLine($"{sensor.Name}: {sensor.Value}°C");
+                    }
+                }
+            }
+        }
+
+        computer.Close();
     }
 }
-
-computer.Close();

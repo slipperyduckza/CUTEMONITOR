@@ -8,18 +8,23 @@ use iced::advanced::image::Handle;
 use iced::widget::{canvas, container, Canvas, Image};
 // Import sysinfo to get system information like CPU usage
 use sysinfo::System;
+// Import for I/O operations
+use std::io;
+use std::process::exit;
 
 // Import gfxinfo for GPU information
 use gfxinfo::active_gpu;
 // Import machine-info for GPU usage
 use machine_info::Machine;
-// Import Windows API functions for reading registry (to detect dark/light theme)
+// Import Windows API functions for reading registry (to detect dark/light theme and VM)
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ,
+    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ,
 };
 
 // Import for hiding console window
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
+// Import for allocating console
+use windows::Win32::System::Console::AllocConsole;
 
 // Import for subscription recipe
 use iced::advanced::subscription::Recipe;
@@ -38,6 +43,31 @@ static INTEL_LOGO: &[u8] = include_bytes!("../INTEL256.png");
 static NVIDIA_LOGO: &[u8] = include_bytes!("../Nvidia_GeForce_256.png");
 static AMD_GPU_LOGO: &[u8] = include_bytes!("../AMD_Radeon_256.png");
 static INTEL_GPU_LOGO: &[u8] = include_bytes!("../Intel_Arc_256.png");
+
+// Function to detect if running in a virtual machine
+fn is_virtual_machine() -> bool {
+    // Check CPU brand for QEMU or KVM
+    let mut sys = System::new();
+    sys.refresh_cpu_all();
+    if let Some(cpu) = sys.cpus().first() {
+        let brand = cpu.brand().to_lowercase();
+        if brand.contains("qemu") || brand.contains("kvm") {
+            return true;
+        }
+    }
+
+    // Check registry for Hyper-V
+    unsafe {
+        let mut key = std::mem::zeroed();
+        let path = windows::core::w!("SOFTWARE\\Microsoft\\Virtual Machine\\Guest\\Parameters");
+        if RegOpenKeyExW(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &mut key).is_ok() {
+            let _ = RegCloseKey(key);
+            return true;
+        }
+    }
+
+    false
+}
 
 // Constants for easy configuration
 const HISTORY_SIZE: usize = 30; // How many past CPU readings to keep
@@ -256,6 +286,10 @@ impl<Message> canvas::Program<Message> for BarChartProgram {
 
 // Function to get temperatures by running the .NET app
 async fn get_temperatures() -> Vec<String> {
+    if is_virtual_machine() {
+        return vec!["Virtual environment detected".to_string()];
+    }
+
     // Create a temp directory
     let temp_dir = std::env::temp_dir().join("cutemonitor_temp");
     if tokio::fs::create_dir_all(&temp_dir).await.is_err() {
@@ -403,17 +437,21 @@ impl Recipe for GfxMonitor {
     ) -> BoxStream<'static, Self::Output> {
         let stream = stream::unfold((), |()| async {
             tokio::time::sleep(std::time::Duration::from_millis(1100)).await; // Update every 1.1 seconds
-            let machine = Machine::new();
-            let graphics = machine.graphics_status();
-            let status = if let Some(usage) = graphics.first() {
-                format!(
-                    "GPU Utilization: {}%\nGPU Memory usage: {} MB\nTemperature: {}°C",
-                    usage.gpu,
-                    usage.memory_used / 1024 / 1024,
-                    usage.temperature
-                )
+            let status = if is_virtual_machine() {
+                "Virtual environment detected".to_string()
             } else {
-                "No GPU detected".to_string()
+                let machine = Machine::new();
+                let graphics = machine.graphics_status();
+                if let Some(usage) = graphics.first() {
+                    format!(
+                        "GPU Utilization: {}%\nGPU Memory usage: {} MB\nTemperature: {}°C",
+                        usage.gpu,
+                        usage.memory_used / 1024 / 1024,
+                        usage.temperature
+                    )
+                } else {
+                    "No GPU detected".to_string()
+                }
             };
             Some((Message::GfxStatusUpdate(status), ()))
         });
@@ -530,16 +568,21 @@ impl Application for Cutemonitor {
         let time = now.format("%H:%M:%S").to_string();
 
         // Get GPU info
-        let gpu_model = match active_gpu() {
-            Ok(gpu) => gpu.model().to_string(),
-            Err(_) => "Unknown".to_string(),
-        };
-        let gpu_vram = match active_gpu() {
-            Ok(gpu) => {
-                let info = gpu.info();
-                format!("{} MB", info.total_vram() / 1024 / 1024)
-            }
-            Err(_) => "Unknown".to_string(),
+        let (gpu_model, gpu_vram) = if is_virtual_machine() {
+            ("Virtual GPU".to_string(), "Unknown".to_string())
+        } else {
+            let gpu_model = match active_gpu() {
+                Ok(gpu) => gpu.model().to_string(),
+                Err(_) => "Unknown".to_string(),
+            };
+            let gpu_vram = match active_gpu() {
+                Ok(gpu) => {
+                    let info = gpu.info();
+                    format!("{} MB", info.total_vram() / 1024 / 1024)
+                }
+                Err(_) => "Unknown".to_string(),
+            };
+            (gpu_model, gpu_vram)
         };
 
         // Create the app instance
@@ -878,5 +921,45 @@ impl Application for Cutemonitor {
 
 // Main function: start the app with default settings
 fn main() -> iced::Result {
+    // Check for .NET 8 Desktop Runtime
+    let output_result = std::process::Command::new("dotnet")
+        .arg("--list-runtimes")
+        .output();
+
+    let is_installed = if let Ok(output) = output_result {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        stdout.contains("Microsoft.WindowsDesktop.App 8.")
+    } else {
+        false
+    };
+
+    if !is_installed {
+        // Allocate console for prompts
+        let _ = unsafe { AllocConsole() };
+
+        println!("You need to install .Net Runtime 8");
+        println!("Do you want to install it now? (Y/N)");
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).expect("Failed to read input");
+        if input.trim().eq_ignore_ascii_case("Y") {
+            // Open PowerShell console and install
+            let status = std::process::Command::new("cmd")
+                .arg("/c")
+                .arg("start")
+                .arg("powershell.exe")
+                .arg("-Command")
+                .arg("winget install --id=Microsoft.DotNet.DesktopRuntime.8 -e")
+                .status()
+                .expect("Failed to run winget install");
+            if !status.success() {
+                println!("Installation failed");
+                exit(1);
+            }
+        } else {
+            println!(".NET 8 Runtime not found, closing");
+            exit(1);
+        }
+    }
+
     Cutemonitor::run(Settings::default())
 }
