@@ -1,7 +1,14 @@
 [package]
 name = "cutemonitor"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
+
+[build-dependencies]
+embed-resource = "2.4"
+usvg = "0.23"
+tiny-skia = "0.6"
+resvg = "0.23"
+ico = "0.1"
 
 [dependencies]
 chrono = "0.4.42"

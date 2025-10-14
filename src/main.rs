@@ -4,8 +4,8 @@ use iced::{
     Length, Settings, Subscription, Theme,
 };
 // Import GUI widgets: Container for styling, Canvas for custom drawing
-use iced::widget::{button, canvas, container, tooltip, tooltip::Position, Canvas, Image};
 use iced::advanced::image::Handle;
+use iced::widget::{canvas, container, Canvas, Image};
 // Import sysinfo to get system information like CPU usage
 use sysinfo::System;
 
@@ -17,11 +17,9 @@ use machine_info::Machine;
 use windows::Win32::System::Registry::{
     RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ,
 };
-// Import for ShellExecute to run as admin
-use windows::Win32::UI::Shell::{ShellExecuteW, IsUserAnAdmin};
+
 // Import for hiding console window
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
-
 
 // Import for subscription recipe
 use iced::advanced::subscription::Recipe;
@@ -72,20 +70,15 @@ fn black_filled_box(_theme: &Theme) -> container::Appearance {
     }
 }
 
-// Function to create a black background style for tooltips
-fn black_tooltip(_theme: &Theme) -> container::Appearance {
-    container::Appearance {
-        background: Some(Background::Color(Color::BLACK)),
-        border: Border { width: 1.0, color: Color::WHITE, radius: border::Radius::from(5.0) },
-        ..Default::default()
-    }
-}
-
 // Function to create a dark grey box with rounded corners
 fn dark_grey_box(_theme: &Theme) -> container::Appearance {
     container::Appearance {
         background: Some(Background::Color(Color::from_rgb(0.3, 0.3, 0.3))), // Dark grey
-        border: Border { width: 0.0, color: Color::BLACK, radius: border::Radius::from(10.0) }, // Rounded corners
+        border: Border {
+            width: 0.0,
+            color: Color::BLACK,
+            radius: border::Radius::from(10.0),
+        }, // Rounded corners
         ..Default::default()
     }
 }
@@ -93,8 +86,16 @@ fn dark_grey_box(_theme: &Theme) -> container::Appearance {
 // Function to create a grey box with color #242323
 fn grey_242323_box(_theme: &Theme) -> container::Appearance {
     container::Appearance {
-        background: Some(Background::Color(Color::from_rgb(36.0 / 255.0, 35.0 / 255.0, 35.0 / 255.0))), // #242323
-        border: Border { width: 0.0, color: Color::BLACK, radius: border::Radius::from(10.0) }, // Rounded corners
+        background: Some(Background::Color(Color::from_rgb(
+            36.0 / 255.0,
+            35.0 / 255.0,
+            35.0 / 255.0,
+        ))), // #242323
+        border: Border {
+            width: 0.0,
+            color: Color::BLACK,
+            radius: border::Radius::from(10.0),
+        }, // Rounded corners
         ..Default::default()
     }
 }
@@ -131,13 +132,6 @@ fn parse_temp(s: &str) -> Option<f32> {
     let num_str = re.captures(s)?.get(1)?.as_str().replace(',', ".");
     num_str.parse().ok()
 }
-
-// Function to check if running as admin
-fn is_admin() -> bool {
-    unsafe { IsUserAnAdmin().as_bool() }
-}
-
-
 
 // Struct to hold the CPU usage data for drawing the overlaid bars
 #[derive(Debug)]
@@ -307,13 +301,12 @@ async fn get_temperatures() -> Vec<String> {
 // Messages that the app can receive to update its state
 #[derive(Debug, Clone)]
 enum Message {
-    UpdateCores(Vec<f32>),            // Contains new CPU core usages
-    UpdateThreads(Vec<f32>),          // Contains new CPU thread usages
-    UpdateTopProcesses(Vec<String>),  // Contains top 3 process names by CPU usage
-    TimeUpdate(String),               // New time string
-    TempUpdate(Vec<String>),          // New temperature data
-    GfxStatusUpdate(String),          // New GFX status data
-    RequestAdmin,                     // Request to run as admin
+    UpdateCores(Vec<f32>),           // Contains new CPU core usages
+    UpdateThreads(Vec<f32>),         // Contains new CPU thread usages
+    UpdateTopProcesses(Vec<String>), // Contains top 3 process names by CPU usage
+    TimeUpdate(String),              // New time string
+    TempUpdate(Vec<String>),         // New temperature data
+    GfxStatusUpdate(String),         // New GFX status data
 }
 
 // Recipe for CPU cores monitoring subscription
@@ -429,18 +422,10 @@ impl Recipe for GfxMonitor {
 }
 
 // Recipe for top processes monitoring subscription
+#[derive(Default)]
 struct TopProcessesMonitor {
     update_count: usize,
     last_top: Vec<String>,
-}
-
-impl Default for TopProcessesMonitor {
-    fn default() -> Self {
-        Self {
-            update_count: 0,
-            last_top: vec![],
-        }
-    }
 }
 
 impl Recipe for TopProcessesMonitor {
@@ -470,7 +455,8 @@ impl Recipe for TopProcessesMonitor {
 
                 let current_top = if let Ok(output) = output {
                     let stdout = String::from_utf8_lossy(&output.stdout);
-                    stdout.lines()
+                    stdout
+                        .lines()
                         .map(|line| line.trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect::<Vec<_>>()
@@ -605,30 +591,6 @@ impl Application for Cutemonitor {
             Message::GfxStatusUpdate(status) => {
                 self.gfx_status = status;
             }
-            Message::RequestAdmin => {
-                // Relaunch as admin and exit current
-                if let Ok(exe_path) = std::env::current_exe() {
-                    let exe_str = exe_path.to_string_lossy();
-                    let exe_wide: Vec<u16> =
-                        exe_str.encode_utf16().chain(std::iter::once(0)).collect();
-                    unsafe {
-                        let result = ShellExecuteW(
-                            None,
-                            windows::core::w!("runas"),
-                            windows::core::PCWSTR::from_raw(exe_wide.as_ptr()),
-                            None,
-                            None,
-                            windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(
-                                windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL.0,
-                            ),
-                        );
-                        if result.0 > 32 {
-                            // Success, exit current
-                            std::process::exit(0);
-                        }
-                    }
-                }
-            }
         }
         // No command needed after update
         Command::none()
@@ -641,9 +603,13 @@ impl Application for Cutemonitor {
 
         // Create the CPU logo image
         let is_amd = self.model.to_lowercase().contains("amd");
-        let logo = Image::new(Handle::from_memory(if is_amd { AMD_LOGO } else { INTEL_LOGO }))
-            .width(128)
-            .height(128);
+        let logo = Image::new(Handle::from_memory(if is_amd {
+            AMD_LOGO
+        } else {
+            INTEL_LOGO
+        }))
+        .width(128)
+        .height(128);
 
         // Create info text column with CPU details
         let info = iced::widget::Column::new()
@@ -667,34 +633,46 @@ impl Application for Cutemonitor {
         // Left top column: cpu_table, space, date_time
         let left_top = iced::widget::Column::new()
             .push(cpu_table)
-            .push(iced::widget::Space::new(Length::Shrink, Length::Fixed(20.0)))
+            .push(iced::widget::Space::new(
+                Length::Shrink,
+                Length::Fixed(20.0),
+            ))
             .push(date_time)
             .width(Length::FillPortion(1)); // 50% width
 
         // Create headline text
-        let headline = iced::widget::text("CPU TEMPERATURES").size(20).horizontal_alignment(alignment::Horizontal::Right);
+        let headline = iced::widget::text("CPU TEMPERATURES")
+            .size(20)
+            .horizontal_alignment(alignment::Horizontal::Right);
 
         // Create temperature display
         let mut temp_column = iced::widget::Column::new().align_items(iced::Alignment::End);
-        if !is_admin() && self.temperatures.iter().any(|t| t.contains("Error")) {
-            temp_column = temp_column.push(tooltip(button("Run as Admin").on_press(Message::RequestAdmin), "Temperature Sensors Need Admin Privileges", Position::Top).style(black_tooltip));
-        } else {
-            for temp in &self.temperatures {
-                let parsed = parse_temp(temp);
-                let color = parsed.map(temp_color).unwrap_or(Color::WHITE);
-                // Split into label and value
-                let parts: Vec<&str> = temp.splitn(2, ':').collect();
-                let label = if parts.len() > 1 { format!("{}:", parts[0]) } else { temp.clone() };
-                let value = if parts.len() > 1 { parts[1].trim().to_string() } else { String::new() };
-                let label_text = iced::widget::text(label).horizontal_alignment(alignment::Horizontal::Right);
-                let value_text = iced::widget::text(value).horizontal_alignment(alignment::Horizontal::Right).style(color);
-                let row = iced::widget::Row::new()
-                    .push(label_text)
-                    .push(iced::widget::Space::new(Length::Fill, Length::Shrink))
-                    .push(value_text)
-                    .width(Length::Fill);
-                temp_column = temp_column.push(row);
-            }
+        for temp in &self.temperatures {
+            let parsed = parse_temp(temp);
+            let color = parsed.map(temp_color).unwrap_or(Color::WHITE);
+            // Split into label and value
+            let parts: Vec<&str> = temp.splitn(2, ':').collect();
+            let label = if parts.len() > 1 {
+                format!("{}:", parts[0])
+            } else {
+                temp.clone()
+            };
+            let value = if parts.len() > 1 {
+                parts[1].trim().to_string()
+            } else {
+                String::new()
+            };
+            let label_text =
+                iced::widget::text(label).horizontal_alignment(alignment::Horizontal::Right);
+            let value_text = iced::widget::text(value)
+                .horizontal_alignment(alignment::Horizontal::Right)
+                .style(color);
+            let row = iced::widget::Row::new()
+                .push(label_text)
+                .push(iced::widget::Space::new(Length::Fill, Length::Shrink))
+                .push(value_text)
+                .width(Length::Fill);
+            temp_column = temp_column.push(row);
         }
         let temp_container = container(temp_column).style(dark_grey_box).padding(10);
 
@@ -726,10 +704,7 @@ impl Application for Cutemonitor {
                     .height(Length::Fixed(BAR_HEIGHT)),
             )
             .style(iced::theme::Container::Custom(Box::new(black_border)));
-            let row = iced::widget::Row::new()
-                .push(label)
-                .push(chart)
-                .spacing(10);
+            let row = iced::widget::Row::new().push(label).push(chart).spacing(10);
             cores_column_inner = cores_column_inner.push(row);
         }
 
@@ -788,7 +763,10 @@ impl Application for Cutemonitor {
             .push(headline)
             .push(iced::widget::Space::new(Length::Shrink, Length::Fixed(4.0)))
             .push(horizontal_line)
-            .push(iced::widget::Space::new(Length::Shrink, Length::Fixed(10.0)))
+            .push(iced::widget::Space::new(
+                Length::Shrink,
+                Length::Fixed(10.0),
+            ))
             .push(table_row);
         let top_processes_container = container(top_processes_column)
             .style(iced::theme::Container::Custom(Box::new(dark_grey_box)))
@@ -822,8 +800,8 @@ impl Application for Cutemonitor {
             .padding(10);
 
         // Create GFX Monitor section
-        let mut gfx_monitor_column = iced::widget::Column::new()
-            .push(iced::widget::text("GFX Monitor").size(20));
+        let mut gfx_monitor_column =
+            iced::widget::Column::new().push(iced::widget::text("GFX Monitor").size(20));
         if !self.gfx_status.is_empty() {
             gfx_monitor_column = gfx_monitor_column.push(iced::widget::text(&self.gfx_status));
         }

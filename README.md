@@ -11,6 +11,11 @@ Cute Monitor is a simple Windows Monitoring app. Written in Rust using VSCodium 
 - Added GPU processor and memory usage and GPU Temperature Monitor
 - Clean, responsive GUI built with Iced
 
+## Recent Changes (v0.1.3)
+
+- Changed application launch to require admin privileges for CPU temperature monitoring rather than a relaunch button due to inconsistency problems
+- Application icon has been integrated
+
 ## Requirements
 
 - Windows 10/11
