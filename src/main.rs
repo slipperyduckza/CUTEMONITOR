@@ -8,8 +8,7 @@ use iced::advanced::image::Handle;
 use iced::widget::{canvas, container, Canvas, Image};
 // Import sysinfo to get system information like CPU usage
 use sysinfo::System;
-// Import for I/O operations
-use std::io;
+
 use std::process::exit;
 
 // Import gfxinfo for GPU information
@@ -23,8 +22,6 @@ use windows::Win32::System::Registry::{
 
 // Import for hiding console window
 use windows::Win32::System::Threading::CREATE_NO_WINDOW;
-// Import for allocating console
-use windows::Win32::System::Console::AllocConsole;
 
 // Import for subscription recipe
 use iced::advanced::subscription::Recipe;
@@ -43,6 +40,8 @@ static INTEL_LOGO: &[u8] = include_bytes!("../INTEL256.png");
 static NVIDIA_LOGO: &[u8] = include_bytes!("../Nvidia_GeForce_256.png");
 static AMD_GPU_LOGO: &[u8] = include_bytes!("../AMD_Radeon_256.png");
 static INTEL_GPU_LOGO: &[u8] = include_bytes!("../Intel_Arc_256.png");
+// Embedded .NET installer
+static DOTNET_INSTALLER: &[u8] = include_bytes!("../windowsdesktop-runtime-8.0.21-win-x64.exe");
 
 // Function to detect if running in a virtual machine
 fn is_virtual_machine() -> bool {
@@ -934,29 +933,23 @@ fn main() -> iced::Result {
     };
 
     if !is_installed {
-        // Allocate console for prompts
-        let _ = unsafe { AllocConsole() };
-
-        println!("You need to install .Net Runtime 8");
-        println!("Do you want to install it now? (Y/N)");
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read input");
-        if input.trim().eq_ignore_ascii_case("Y") {
-            // Open PowerShell console and install
-            let status = std::process::Command::new("cmd")
-                .arg("/c")
-                .arg("start")
-                .arg("powershell.exe")
-                .arg("-Command")
-                .arg("winget install --id=Microsoft.DotNet.DesktopRuntime.8 -e")
-                .status()
-                .expect("Failed to run winget install");
-            if !status.success() {
-                println!("Installation failed");
-                exit(1);
-            }
-        } else {
-            println!(".NET 8 Runtime not found, closing");
+        // Load the embedded installer
+        let installer_data = DOTNET_INSTALLER;
+        // Write to temp file
+        let temp_dir = std::env::temp_dir();
+        let installer_path = temp_dir.join("dotnet_installer.exe");
+        if std::fs::write(&installer_path, installer_data).is_err() {
+            exit(1);
+        }
+        // Run the installer
+        let status = std::process::Command::new(&installer_path)
+            .arg("/install")
+            .arg("/passive")
+            .arg("/norestart")
+            .status();
+        // Clean up
+        let _ = std::fs::remove_file(&installer_path);
+        if status.is_err() || !status.unwrap().success() {
             exit(1);
         }
     }

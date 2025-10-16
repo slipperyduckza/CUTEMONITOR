@@ -41,9 +41,7 @@ fn main() {
         std::fs::write("target/icon.ico", ico_data).expect("Failed to write ICO");
 
         // Create resource.rc
-        let rc_content = r#"1 ICON "target/icon.ico"
-1 24 "src/app.manifest"
-"#;
+        let rc_content = "1 ICON \"target/icon.ico\"\r\n1 24 \"src/app.manifest\"\r\n";
         std::fs::write("resource.rc", rc_content).expect("Failed to write resource.rc");
 
         // Compile and embed resources
