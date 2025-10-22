@@ -7,32 +7,32 @@ use iced::{
 use iced::advanced::image::Handle;
 use iced::widget::{canvas, container, Canvas, Image};
 // Import sysinfo to get system information like CPU usage
-use sysinfo::System;
+
 
 use std::process::exit;
 
+
+
 // Import gfxinfo for GPU information
 use gfxinfo::active_gpu;
-// Import machine-info for GPU usage
-use machine_info::Machine;
+
 // Import Windows API functions for reading registry (to detect dark/light theme and VM)
 use windows::Win32::System::Registry::{
-    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ,
+    RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ,
 };
 
+
+
 // Import for hiding console window
-use windows::Win32::System::Threading::CREATE_NO_WINDOW;
+
 
 // Import for subscription recipe
 use iced::advanced::subscription::Recipe;
 // Import futures for streams
 use iced::futures::stream::{self, BoxStream};
 // Import for async process
-use tokio::process::Command as TokioCommand;
-// Embedded files
-static TEMP_CS: &[u8] = include_bytes!("../TempMonitor.cs");
-static TEMP_CSPROJ: &[u8] = include_bytes!("../TempMonitor.csproj");
-static TEMP_DLL: &[u8] = include_bytes!("../LibreHardwareMonitorLib.dll");
+
+
 // Embedded logos
 static AMD_LOGO: &[u8] = include_bytes!("../AMD256.png");
 static INTEL_LOGO: &[u8] = include_bytes!("../INTEL256.png");
@@ -40,38 +40,28 @@ static INTEL_LOGO: &[u8] = include_bytes!("../INTEL256.png");
 static NVIDIA_LOGO: &[u8] = include_bytes!("../Nvidia_GeForce_256.png");
 static AMD_GPU_LOGO: &[u8] = include_bytes!("../AMD_Radeon_256.png");
 static INTEL_GPU_LOGO: &[u8] = include_bytes!("../Intel_Arc_256.png");
-// Embedded .NET installer
-static DOTNET_INSTALLER: &[u8] = include_bytes!("../windowsdesktop-runtime-8.0.21-win-x64.exe");
 
-// Function to detect if running in a virtual machine
-fn is_virtual_machine() -> bool {
-    // Check CPU brand for QEMU or KVM
-    let mut sys = System::new();
-    sys.refresh_cpu_all();
-    if let Some(cpu) = sys.cpus().first() {
-        let brand = cpu.brand().to_lowercase();
-        if brand.contains("qemu") || brand.contains("kvm") {
-            return true;
-        }
-    }
+mod dotnet_runtime;
 
-    // Check registry for Hyper-V
-    unsafe {
-        let mut key = std::mem::zeroed();
-        let path = windows::core::w!("SOFTWARE\\Microsoft\\Virtual Machine\\Guest\\Parameters");
-        if RegOpenKeyExW(HKEY_LOCAL_MACHINE, path, 0, KEY_READ, &mut key).is_ok() {
-            let _ = RegCloseKey(key);
-            return true;
-        }
-    }
+mod what_cpu_check;
 
-    false
-}
+mod dating_function;
+
+mod cpu_temp_monitor;
+
+mod core_thread_data;
+
+mod user_thread_collect;
+
+mod gpu_data_collect;
+
+
+
 
 // Constants for easy configuration
 const HISTORY_SIZE: usize = 30; // How many past CPU readings to keep
 const BAR_HEIGHT: f32 = 20.0; // Height of each progress bar in pixels
-const SPACING: f32 = 20.0; // Spacing between UI elements
+const SPACING: f32 = 10.0; // Spacing between UI elements
 
 // Function to create a black border style for containers around the bars
 fn black_border(_theme: &Theme) -> container::Appearance {
@@ -154,13 +144,7 @@ fn temp_color(temp: f32) -> Color {
     }
 }
 
-// Function to parse temperature from string
-fn parse_temp(s: &str) -> Option<f32> {
-    use regex::Regex;
-    let re = Regex::new(r"(\d+(?:[.,]\d+)?)°C").unwrap();
-    let num_str = re.captures(s)?.get(1)?.as_str().replace(',', ".");
-    num_str.parse().ok()
-}
+
 
 // Struct to hold the CPU usage data for drawing the overlaid bars
 #[derive(Debug)]
@@ -283,53 +267,10 @@ impl<Message> canvas::Program<Message> for BarChartProgram {
     }
 }
 
-// Function to get temperatures by running the .NET app
-async fn get_temperatures() -> Vec<String> {
-    if is_virtual_machine() {
-        return vec!["Virtual environment detected".to_string()];
-    }
 
-    // Create a temp directory
-    let temp_dir = std::env::temp_dir().join("cutemonitor_temp");
-    if tokio::fs::create_dir_all(&temp_dir).await.is_err() {
-        return vec!["Error creating temp dir".to_string()];
-    }
 
-    // Write the files
-    let cs_path = temp_dir.join("TempMonitor.cs");
-    let csproj_path = temp_dir.join("TempMonitor.csproj");
-    let dll_path = temp_dir.join("LibreHardwareMonitorLib.dll");
 
-    if tokio::fs::write(&cs_path, TEMP_CS).await.is_err() {
-        return vec!["Error writing cs".to_string()];
-    }
-    if tokio::fs::write(&csproj_path, TEMP_CSPROJ).await.is_err() {
-        return vec!["Error writing csproj".to_string()];
-    }
-    if tokio::fs::write(&dll_path, TEMP_DLL).await.is_err() {
-        return vec!["Error writing dll".to_string()];
-    }
 
-    // Run the command
-    let output = TokioCommand::new("dotnet")
-        .arg("run")
-        .arg("--project")
-        .arg(&csproj_path)
-        .creation_flags(CREATE_NO_WINDOW.0)
-        .output()
-        .await;
-
-    // Clean up temp files
-    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.lines().map(|line| line.to_string()).collect()
-        }
-        _ => vec!["Error getting temperatures".to_string()],
-    }
-}
 
 // Messages that the app can receive to update its state
 #[derive(Debug, Clone)]
@@ -353,20 +294,17 @@ impl Recipe for CpuCoresMonitor {
         std::any::TypeId::of::<Self>().hash(state);
     }
 
-    fn stream(
-        self: Box<Self>,
-        _input: BoxStream<'static, (event::Event, event::Status)>,
-    ) -> BoxStream<'static, Self::Output> {
-        let stream = stream::unfold((), |()| async {
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            let mut sys = System::new_all();
-            sys.refresh_cpu_all();
-            let cores = System::physical_core_count().unwrap_or(1);
-            let core_usages: Vec<f32> = (0..cores).map(|i| sys.cpus()[i].cpu_usage()).collect();
-            Some((Message::UpdateCores(core_usages), ()))
-        });
-        Box::pin(stream)
-    }
+        fn stream(
+            self: Box<Self>,
+            _input: BoxStream<'static, (event::Event, event::Status)>,
+        ) -> BoxStream<'static, Self::Output> {
+            let stream = stream::unfold((), |()| async {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                let core_usages = core_thread_data::get_core_usages();
+                Some((Message::UpdateCores(core_usages), ()))
+            });
+            Box::pin(stream)
+        }
 }
 
 // Recipe for CPU threads monitoring subscription
@@ -380,19 +318,17 @@ impl Recipe for CpuThreadsMonitor {
         std::any::TypeId::of::<Self>().hash(state);
     }
 
-    fn stream(
-        self: Box<Self>,
-        _input: BoxStream<'static, (event::Event, event::Status)>,
-    ) -> BoxStream<'static, Self::Output> {
-        let stream = stream::unfold((), |()| async {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let mut sys = System::new_all();
-            sys.refresh_cpu_all();
-            let thread_usages: Vec<f32> = sys.cpus().iter().map(|cpu| cpu.cpu_usage()).collect();
-            Some((Message::UpdateThreads(thread_usages), ()))
-        });
-        Box::pin(stream)
-    }
+        fn stream(
+            self: Box<Self>,
+            _input: BoxStream<'static, (event::Event, event::Status)>,
+        ) -> BoxStream<'static, Self::Output> {
+            let stream = stream::unfold((), |()| async {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let thread_usages = core_thread_data::get_thread_usages();
+                Some((Message::UpdateThreads(thread_usages), ()))
+            });
+            Box::pin(stream)
+        }
 }
 
 // Recipe for temperature monitoring subscription
@@ -406,17 +342,17 @@ impl Recipe for TempMonitor {
         std::any::TypeId::of::<Self>().hash(state);
     }
 
-    fn stream(
-        self: Box<Self>,
-        _input: BoxStream<'static, (event::Event, event::Status)>,
-    ) -> BoxStream<'static, Self::Output> {
-        let stream = stream::unfold((), |()| async {
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await; // Update every 3 seconds
-            let temps = get_temperatures().await;
-            Some((Message::TempUpdate(temps), ()))
-        });
-        Box::pin(stream)
-    }
+        fn stream(
+            self: Box<Self>,
+            _input: BoxStream<'static, (event::Event, event::Status)>,
+        ) -> BoxStream<'static, Self::Output> {
+            let stream = stream::unfold((), |()| async {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await; // Update every 3 seconds
+                let temps = cpu_temp_monitor::get_temperatures().await;
+                Some((Message::TempUpdate(temps), ()))
+            });
+            Box::pin(stream)
+        }
 }
 
 // Recipe for GFX status monitoring subscription
@@ -434,24 +370,9 @@ impl Recipe for GfxMonitor {
         self: Box<Self>,
         _input: BoxStream<'static, (event::Event, event::Status)>,
     ) -> BoxStream<'static, Self::Output> {
-        let stream = stream::unfold((), |()| async {
+        let stream = stream::unfold((), |()| async move {
             tokio::time::sleep(std::time::Duration::from_millis(1100)).await; // Update every 1.1 seconds
-            let status = if is_virtual_machine() {
-                "Virtual environment detected".to_string()
-            } else {
-                let machine = Machine::new();
-                let graphics = machine.graphics_status();
-                if let Some(usage) = graphics.first() {
-                    format!(
-                        "GPU Utilization: {}%\nGPU Memory usage: {} MB\nTemperature: {}°C",
-                        usage.gpu,
-                        usage.memory_used / 1024 / 1024,
-                        usage.temperature
-                    )
-                } else {
-                    "No GPU detected".to_string()
-                }
-            };
+            let status = gpu_data_collect::get_gpu_status();
             Some((Message::GfxStatusUpdate(status), ()))
         });
         Box::pin(stream)
@@ -482,25 +403,7 @@ impl Recipe for TopProcessesMonitor {
             monitor.update_count += 1;
 
             let top_names = if monitor.update_count >= 6 {
-                // Use PowerShell to get top 3 processes by CPU
-                let output = tokio::process::Command::new("powershell")
-                    .arg("-Command")
-                    .arg(r"Get-Process | Where-Object { $_.CPU -ne $null -and $_.Name -notmatch '^(System|Idle|csrss|wininit|services|lsass|winlogon|smss|svchost|explorer|dwm|taskhostw|sihost|fontdrvhost|ctfmon|SearchIndexer|SearchHost|RuntimeBroker|StartMenuExperienceHost|ShellExperienceHost|ApplicationFrameHost|TextInputHost|LockApp|WWAHost|MicrosoftEdge|msedge|msedgewebview2|conhost|eServiceHost|eOppFrame|LibreHardwareService|wlanext|ngclso|UserOOBEBroker|dllhost|SystemSettings|ShellHost|cutemonitor|tui-jfedab57)$' } | Sort-Object -Property CPU -Descending | Select-Object -First 3 -Property @{Name='DisplayName'; Expression={if ($_.Description) {$_.Description} else {$_.Name}}} | Format-Table -HideTableHeaders")
-                    .creation_flags(CREATE_NO_WINDOW.0)
-                    .output()
-                    .await;
-
-                let current_top = if let Ok(output) = output {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-                    stdout
-                        .lines()
-                        .map(|line| line.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<_>>()
-                } else {
-                    vec![]
-                };
-
+                let current_top = user_thread_collect::get_top_processes().await;
                 monitor.last_top = current_top.clone();
                 monitor.update_count = 0;
                 current_top
@@ -521,6 +424,7 @@ struct Cutemonitor {
     threads: usize,               // Number of CPU threads
     core_usages: Vec<Vec<f32>>,   // History of CPU core usages (each core has a vec of past usages)
     thread_usages: Vec<Vec<f32>>, // History of CPU thread usages
+    total_usages: Vec<f32>,       // History of total CPU usages
     top_processes: Vec<String>,   // Top 3 processes by CPU usage
     gpu_model: String,            // GPU model name
     gpu_vram: String,             // GPU VRAM amount
@@ -543,31 +447,23 @@ impl Application for Cutemonitor {
 
     // Initialize the app: get system info, set up data structures
     fn new(_flags: ()) -> (Self, Command<Message>) {
-        // Create a system info object and refresh CPU data
-        let mut sys = System::new_all();
-        sys.refresh_cpu_all();
-
-        // Get CPU info from the first core
-        let cpu = sys.cpus().first().unwrap();
-        let brand = cpu.brand();
-
-        // Store CPU model name
-        let model = brand.to_string();
-        // Get number of physical cores and total threads
-        let cores = System::physical_core_count().unwrap_or(1);
-        let threads = sys.cpus().len();
+    // Get CPU info
+    let cpu_info = what_cpu_check::get_cpu_info();
+    let model = cpu_info.model;
+    let cores = cpu_info.cores;
+    let threads = cpu_info.threads;
 
         // Initialize usage history vectors with 10% for cores, zeros for threads
         let core_usages = vec![vec![10.0; HISTORY_SIZE]; cores];
         let thread_usages = vec![vec![0.0; HISTORY_SIZE]; threads];
+        let total_usages = vec![0.0; HISTORY_SIZE];
 
-        // Initialize date and time
-        let now = chrono::Local::now();
-        let date = format!("{} {}", now.format("%A"), now.format("%x"));
-        let time = now.format("%H:%M:%S").to_string();
+    // Initialize date and time
+    let date = dating_function::get_current_date();
+    let time = dating_function::get_current_time();
 
         // Get GPU info
-        let (gpu_model, gpu_vram) = if is_virtual_machine() {
+        let (gpu_model, gpu_vram) = if what_cpu_check::is_virtual_machine() {
             ("Virtual GPU".to_string(), "Unknown".to_string())
         } else {
             let gpu_model = match active_gpu() {
@@ -591,6 +487,7 @@ impl Application for Cutemonitor {
             threads,
             core_usages,
             thread_usages,
+            total_usages,
             top_processes: vec![],
             gpu_model,
             gpu_vram,
@@ -613,6 +510,11 @@ impl Application for Cutemonitor {
                     self.core_usages[i].insert(0, usage);
                     self.core_usages[i].truncate(HISTORY_SIZE);
                 }
+                // Calculate and update total CPU usage
+                let total: f32 = core.iter().sum();
+                let avg_total = total / core.len() as f32;
+                self.total_usages.insert(0, avg_total);
+                self.total_usages.truncate(HISTORY_SIZE);
             }
             Message::UpdateThreads(thread) => {
                 // Update thread usage history: add new value at the beginning, keep only HISTORY_SIZE entries
@@ -677,7 +579,7 @@ impl Application for Cutemonitor {
             .push(cpu_table)
             .push(iced::widget::Space::new(
                 Length::Shrink,
-                Length::Fixed(20.0),
+                Length::Fixed(10.0),
             ))
             .push(date_time)
             .width(Length::FillPortion(1)); // 50% width
@@ -690,7 +592,7 @@ impl Application for Cutemonitor {
         // Create temperature display
         let mut temp_column = iced::widget::Column::new().align_items(iced::Alignment::End);
         for temp in &self.temperatures {
-            let parsed = parse_temp(temp);
+            let parsed = cpu_temp_monitor::parse_temp(temp);
             let color = parsed.map(temp_color).unwrap_or(Color::WHITE);
             // Split into label and value
             let parts: Vec<&str> = temp.splitn(2, ':').collect();
@@ -857,10 +759,38 @@ impl Application for Cutemonitor {
             .push(iced::widget::Space::new(Length::Fill, Length::Shrink))
             .push(gfx_monitor_container);
 
-        // Final layout: top row, then graphs container, then top processes, then bottom row, with spacing
+        // Create the CPU Total section
+        let total_text = iced::widget::text("Total");
+        let current = self.total_usages[0];
+        let previous = self.total_usages.get(1).copied().unwrap_or(0.0);
+        let oldest = self.total_usages.get(2).copied().unwrap_or(0.0);
+        let total_graph = iced::widget::container(
+            Canvas::new(OverlayBarProgram {
+                current,
+                previous,
+                oldest,
+            })
+            .width(Length::Fill)
+            .height(Length::Fixed(BAR_HEIGHT)),
+        )
+        .style(iced::theme::Container::Custom(Box::new(black_border)));
+        let total_percentage = iced::widget::text(format!("{:.1}%", current))
+            .horizontal_alignment(alignment::Horizontal::Right);
+        let total_row = iced::widget::Row::new()
+            .push(total_text)
+            .push(total_graph)
+            .push(total_percentage)
+            .spacing(10)
+            .align_items(iced::Alignment::Center);
+        let total_container = container(total_row)
+            .style(iced::theme::Container::Custom(Box::new(black_filled_box)))
+            .padding(10);
+
+        // Final layout: top row, then graphs container, then total, then top processes, then bottom row, with spacing
         let main_column = iced::widget::Column::new()
             .push(top_row)
             .push(graphs_container)
+            .push(total_container)
             .push(top_processes_container)
             .push(bottom_row)
             .spacing(SPACING);
@@ -876,8 +806,7 @@ impl Application for Cutemonitor {
             iced::Subscription::from_recipe(TopProcessesMonitor::default()),
             iced::Subscription::from_recipe(GfxMonitor),
             time::every(std::time::Duration::from_secs(1)).map(|_| {
-                let now = chrono::Local::now();
-                Message::TimeUpdate(now.format("%H:%M:%S").to_string())
+                Message::TimeUpdate(dating_function::get_current_time())
             }),
         ])
     }
@@ -920,38 +849,9 @@ impl Application for Cutemonitor {
 
 // Main function: start the app with default settings
 fn main() -> iced::Result {
-    // Check for .NET 8 Desktop Runtime
-    let output_result = std::process::Command::new("dotnet")
-        .arg("--list-runtimes")
-        .output();
-
-    let is_installed = if let Ok(output) = output_result {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        stdout.contains("Microsoft.WindowsDesktop.App 8.")
-    } else {
-        false
-    };
-
-    if !is_installed {
-        // Load the embedded installer
-        let installer_data = DOTNET_INSTALLER;
-        // Write to temp file
-        let temp_dir = std::env::temp_dir();
-        let installer_path = temp_dir.join("dotnet_installer.exe");
-        if std::fs::write(&installer_path, installer_data).is_err() {
-            exit(1);
-        }
-        // Run the installer
-        let status = std::process::Command::new(&installer_path)
-            .arg("/install")
-            .arg("/passive")
-            .arg("/norestart")
-            .status();
-        // Clean up
-        let _ = std::fs::remove_file(&installer_path);
-        if status.is_err() || !status.unwrap().success() {
-            exit(1);
-        }
+    if let Err(e) = dotnet_runtime::check_and_install_dotnet() {
+        eprintln!("Error: {}", e);
+        exit(1);
     }
 
     Cutemonitor::run(Settings::default())
