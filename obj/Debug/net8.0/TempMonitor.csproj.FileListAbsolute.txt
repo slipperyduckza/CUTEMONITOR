@@ -1,0 +1,16 @@
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\TempMonitor.exe
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\TempMonitor.deps.json
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\TempMonitor.runtimeconfig.json
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\TempMonitor.dll
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\TempMonitor.pdb
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\LibreHardwareMonitorLib.dll
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMonitor.csproj.AssemblyReference.cache
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMonitor.GeneratedMSBuildEditorConfig.editorconfig
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMonitor.csproj.CoreCompileInputs.cache
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMoni.724C7FAA.Up2Date
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMonitor.dll
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\refint\TempMonitor.dll
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMonitor.pdb
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\TempMonitor.genruntimeconfig.cache
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\obj\Debug\net8.0\ref\TempMonitor.dll
+D:\Documents\CODING\LIBREHARDWARE-PROTOTYPE\bin\Debug\net8.0\LibreHardwareMonitorLib.xml
