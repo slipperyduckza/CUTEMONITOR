@@ -47,8 +47,8 @@ pub fn main() -> iced::Result {
         unsafe {
             MessageBoxA(
                 HWND::default(), // Default window handle
-                PCSTR::from_raw(b"This program requires administrator privileges.\0".as_ptr()), // Message text
-                PCSTR::from_raw(b"Administrator Required\0".as_ptr()), // Window title
+                PCSTR::from_raw(b"This program requires administrator privileges.\0".as_ptr() as *const u8), // Message text
+                PCSTR::from_raw(b"Administrator Required\0".as_ptr() as *const u8), // Window title
                 MB_ICONERROR, // Error icon
             );
         }
@@ -72,12 +72,16 @@ pub fn main() -> iced::Result {
         icon::from_rgba(rgba, width, height).unwrap()
     };
 
+    // Load saved window position
+    let saved_position = crate::utils::load_window_position();
+
     // Create and run the Iced application
     iced::application("LibreHardware Prototype", State::update, State::view)
         .subscription(State::subscription) // Set up data subscriptions
         .window(iced::window::Settings {
             icon: Some(icon), // Set the window icon
-            size: (1120.0, 800.0).into(), // Set initial window size
+            size: (940.0, 860.0).into(), // Set initial window size
+            position: saved_position.map_or(iced::window::Position::default(), |(x, y)| iced::window::Position::Specific(iced::Point::new(x as f32, y as f32))),
             ..Default::default() // Use default settings for everything else
         })
         .run() // Start the application event loop

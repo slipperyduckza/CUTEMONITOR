@@ -39,11 +39,18 @@ impl<Message> canvas::Program<Message> for BarChartProgram {
             let bar_height = (usage / 100.0) * bounds.height;
             let y = bounds.height - bar_height;
 
-            // Draw bar with color similar to PROTOTYPE
+            // Draw bar with gradient color from base (low usage) to red (high usage) using exponential curve
+            let base_r = 123.0 / 255.0;
+            let base_g = 104.0 / 255.0;
+            let base_b = 238.0 / 255.0;
+            let t = (usage / 100.0).powf(3.8); // Exponential growth for slower transition at low-mid usage
+            let r = base_r + t * (1.0 - base_r);
+            let g = base_g + t * (0.0 - base_g);
+            let b = base_b + t * (0.0 - base_b);
             frame.fill_rectangle(
                 iced::Point::new(x, y),
                 iced::Size::new(bar_width * scale_x, bar_height),
-                iced::Color::from_rgb(123.0 / 255.0, 104.0 / 255.0, 238.0 / 255.0), // Medium slate blue
+                iced::Color::from_rgb(r, g, b),
             );
 
             // Draw stroke
@@ -120,14 +127,18 @@ impl<Message> canvas::Program<Message> for OverlayBarProgram {
             );
         }
 
-        // Current bar - bright color, drawn last (appears on top)
+        // Current bar - gradient color from blue (0%) to red (100%), drawn last (appears on top)
         let current_width = bounds.width * self.current / 100.0;
         let height = bounds.height - 1.0; // Almost full height
         let y = bounds.height - height;
+        let t = self.current / 100.0;
+        let r = t;
+        let g = 0.0;
+        let b = 1.0 - t;
         frame.fill_rectangle(
             iced::Point::new(0.0, y),
             iced::Size::new(current_width, height),
-            iced::Color::from_rgba(0.1, 0.1, 1.0, 1.0), // Bright blue, fully opaque
+            iced::Color::from_rgb(r, g, b),
         );
 
         // Return the completed drawing

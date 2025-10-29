@@ -13,6 +13,7 @@ pub enum Message {
     UpdateProcesses(Vec<what_cpu_check::ProcessInfo>),
     UpdateGpu(hardware_checker::GpuData),
     WindowResized((f32, f32)),
+    WindowEvent(iced::window::Event),
 }
 
 pub struct State {
@@ -24,6 +25,7 @@ pub struct State {
     pub chipset_temp: Option<f32>,
     pub memory_usage: f32,
     pub total_memory_mb: i32,
+    pub used_memory_mb: f32,
     pub memory_speed_mts: i32,
     pub cpu_model: String,
     pub cpu_cores: usize,
@@ -35,6 +37,7 @@ pub struct State {
     pub processes_history: HashMap<String, Vec<f32>>,
     pub gpu_data: hardware_checker::GpuData,
     pub window_size: (f32, f32),
+    pub window_position: Option<(i32, i32)>,
 }
 
 /// Implementation of the Default trait to create initial application state
@@ -54,6 +57,7 @@ impl Default for State {
             chipset_temp: None,
             memory_usage: 0.0,
             total_memory_mb: 0,
+            used_memory_mb: 0.0,
             memory_speed_mts: 0,
 
             // CPU info from system detection
@@ -86,6 +90,7 @@ impl Default for State {
 
             // Default window size
             window_size: (800.0, 600.0),
+            window_position: None,
         }
     }
 }
@@ -103,6 +108,7 @@ impl State {
                 self.memory_usage = data.memory_usage;
                 self.total_memory_mb = data.total_memory_mb;
                 self.memory_speed_mts = data.memory_speed_mts;
+                self.used_memory_mb = (data.memory_usage / 100.0) * data.total_memory_mb as f32;
                 iced::Task::none()
             }
             Message::UpdateCores(core) => {
@@ -152,6 +158,16 @@ impl State {
             // Handle window resize events
             Message::WindowResized(size) => {
                 self.window_size = size; // Update stored window size
+                iced::Task::none()
+            }
+            Message::WindowEvent(event) => {
+                if let iced::window::Event::Moved(point) = event {
+                    let x = point.x as i32;
+                    let y = point.y as i32;
+                    self.window_position = Some((x, y));
+                    // Save to registry
+                    crate::utils::save_window_position(x, y);
+                }
                 iced::Task::none()
             }
         }
@@ -255,11 +271,25 @@ impl State {
 
         elements.push(
             row![
-                text("Memory Usage:").size(13),
+                text("Memory Utilized:").size(13),
                 container(
                     text(format!("{:.1}%", self.memory_usage))
                         .size(13)
                         .color(crate::data_colouring::memory_color(self.memory_usage))
+                )
+                .align_x(iced::alignment::Horizontal::Right)
+                .width(Length::Fill)
+            ]
+            .width(Length::Fill)
+            .into(),
+        );
+
+        elements.push(
+            row![
+                text("Memory Usage:").size(13),
+                container(
+                    text(format!("{:.0} MB", self.used_memory_mb))
+                        .size(13)
                 )
                 .align_x(iced::alignment::Horizontal::Right)
                 .width(Length::Fill)
@@ -445,7 +475,7 @@ impl State {
             .width(Length::FillPortion(35));
 
         // Create the total CPU usage section
-        let total_text = text("Total").size(13);
+        let total_text = text("Total").size(13).width(Length::FillPortion(4));
         let current = self.total_usages[0];
         let previous = self.total_usages.get(1).copied().unwrap_or(0.0);
         let oldest = self.total_usages.get(2).copied().unwrap_or(0.0);
@@ -458,10 +488,11 @@ impl State {
             .width(Length::Fill)
             .height(Length::Fixed(crate::BAR_HEIGHT)),
         )
-        .style(crate::styles::black_border);
+        .style(crate::styles::black_border)
+        .width(Length::FillPortion(90));
         let total_percentage = container(text(format!("{:.1}%", current)).size(13))
             .align_x(iced::alignment::Horizontal::Right)
-            .width(Length::Fill);
+            .width(Length::FillPortion(6));
         let total_row = row![total_text, total_graph, total_percentage]
             .spacing(10)
             .align_y(iced::Alignment::Center);
@@ -631,34 +662,106 @@ impl State {
         .align_y(iced::alignment::Vertical::Center)
         .padding(10);
 
-        let gpu_util_text = if let Some(util) = self.gpu_data.utilization {
-            text(format!("GPU Utilization: {:.1}%", util)).size(13)
+        let gpu_util_row = if let Some(util) = self.gpu_data.utilization {
+            row![
+                text("GPU Utilization:").size(13),
+                container(text(format!("{:.1}%", util)).size(13).color(crate::data_colouring::utilization_color(util)))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         } else {
-            text("GPU Utilization: N/A").size(13)
+            row![
+                text("GPU Utilization:").size(13),
+                container(text("N/A").size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         };
-        let gpu_mem_text = if let Some(mem) = self.gpu_data.memory_usage {
-            text(format!("Memory Usage: {:.1}%", mem)).size(13)
+        let gpu_mem_row = if let Some(mem) = self.gpu_data.memory_usage {
+            row![
+                text("Memory Utilized:").size(13),
+                container(text(format!("{:.1}%", mem)).size(13).color(crate::data_colouring::memory_color(mem)))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         } else {
-            text("Memory Usage: N/A").size(13)
+            row![
+                text("Memory Utilized:").size(13),
+                container(text("N/A").size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         };
-        let gpu_temp_text = if let Some(temp) = self.gpu_data.temp {
-            text(format!("Temperature: {:.1}°C", temp)).size(13).color(crate::data_colouring::temperature_color(temp))
+        let gpu_mem_usage_row = if let Some(mem) = self.gpu_data.memory_usage {
+            let used_mb = (mem / 100.0) * self.gpu_data.vram_mb as f32;
+            row![
+                text("Memory Usage:").size(13),
+                container(text(format!("{:.0} MB", used_mb)).size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         } else {
-            text("Temperature: N/A").size(13)
+            row![
+                text("Memory Usage:").size(13),
+                container(text("N/A").size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         };
-        let gpu_encoder_text = if let Some(enc) = self.gpu_data.encoder {
-            text(format!("GPU Encoder: {:.1}%", enc)).size(13)
+        let gpu_temp_row = if let Some(temp) = self.gpu_data.temp {
+            row![
+                text("Temperature:").size(13),
+                container(text(format!("{:.1}°C", temp)).size(13).color(crate::data_colouring::temperature_color(temp)))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         } else {
-            text("GPU Encoder: N/A").size(13)
+            row![
+                text("Temperature:").size(13),
+                container(text("N/A").size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         };
-        let gpu_decoder_text = if let Some(dec) = self.gpu_data.decoder {
-            text(format!("GPU Decoder: {:.1}%", dec)).size(13)
+        let gpu_encoder_row = if let Some(enc) = self.gpu_data.encoder {
+            row![
+                text("GPU Encoder:").size(13),
+                container(text(format!("{:.1}%", enc)).size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         } else {
-            text("GPU Decoder: N/A").size(13)
+            row![
+                text("GPU Encoder:").size(13),
+                container(text("N/A").size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
+        };
+        let gpu_decoder_row = if let Some(dec) = self.gpu_data.decoder {
+            row![
+                text("GPU Decoder:").size(13),
+                container(text(format!("{:.1}%", dec)).size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
+        } else {
+            row![
+                text("GPU Decoder:").size(13),
+                container(text("N/A").size(13))
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .width(Length::Fill)
+            ].width(Length::Fill)
         };
 
         let gpu_monitor_container =
-            container(column![gpu_util_text, gpu_mem_text, gpu_temp_text, gpu_encoder_text, gpu_decoder_text].spacing(1))
+            container(
+                column![
+                    text("GPU INFORMATION").size(17),
+                    column![gpu_util_row, gpu_mem_row, gpu_mem_usage_row, gpu_temp_row, gpu_encoder_row, gpu_decoder_row].spacing(1)
+                ]
+                .spacing(5)
+            )
                 .style(|_theme| container::Style {
                     background: Some(iced::Background::Color(iced::Color::from_rgb(
                         0.3, 0.3, 0.3,
@@ -714,6 +817,7 @@ impl State {
             crate::hardware_checker::gpu_data_stream().map(Message::UpdateGpu),
             iced::window::resize_events()
                 .map(|(_id, size)| Message::WindowResized((size.width, size.height))),
+            iced::window::events().map(|(_id, event)| Message::WindowEvent(event)),
         ])
     }
 }

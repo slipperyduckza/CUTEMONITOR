@@ -78,6 +78,7 @@ pub fn hardware_data_stream() -> iced::Subscription<HardwareData> {
             let temp_dir = extract_resources();
             let exe_path = temp_dir.join("TempMonitor.exe");
             // Spawn the C# executable with piped stdout for reading output.
+            #[allow(clippy::zombie_processes)]
             let mut cmd = std::process::Command::new(&exe_path)
                 .stdout(std::process::Stdio::piped())
                 .spawn()
@@ -175,7 +176,7 @@ pub fn get_gpu_data() -> GpuData {
 
     GpuData {
         model: card.name.clone(),
-        vram_mb: card.memory / 1_000_000, // Convert bytes to MB
+        vram_mb: card.memory / 1_048_576, // Convert bytes to MiB
         temp: usage
             .map(|u| u.temperature as f32)
             .or(Some(card.temperature as f32)), // Fallback to static temp if dynamic unavailable
