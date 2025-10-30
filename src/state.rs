@@ -1,21 +1,33 @@
-use std::collections::HashMap;
-
 use crate::hardware_checker;
+// This module manages the application's state and UI updates
+// It handles messages from subscriptions and updates the display accordingly
+// The State struct holds all the data needed to render the UI
+
 use crate::what_cpu_check;
 
-
-
+/// Messages that can be sent to update the application state
+/// Messages that can be sent to update the application state
+/// These are processed in the update() function to modify the UI
 #[derive(Debug, Clone)]
 pub enum Message {
+    /// Update hardware data (temperatures, voltages, etc.)
     UpdateData(hardware_checker::HardwareData),
+    /// Update per-core CPU usage percentages
     UpdateCores(Vec<f32>),
+    /// Update per-thread CPU usage percentages
     UpdateThreads(Vec<f32>),
+    /// Update the list of top user processes
     UpdateProcesses(Vec<what_cpu_check::ProcessInfo>),
+    /// Update GPU information
     UpdateGpu(hardware_checker::GpuData),
+    /// Handle window resize events
     WindowResized((f32, f32)),
+    /// Handle other window events
     WindowEvent(iced::window::Event),
 }
 
+/// The main application state containing all data needed for the UI
+/// This struct holds current hardware readings, CPU usage history, and process information
 pub struct State {
     pub motherboard_model: String,
     pub cpu_temp: f32,
@@ -34,7 +46,7 @@ pub struct State {
     pub core_usages: Vec<Vec<f32>>,
     pub thread_usages: Vec<Vec<f32>>,
     pub total_usages: Vec<f32>,
-    pub processes_history: HashMap<String, Vec<f32>>,
+    pub top_processes: Vec<what_cpu_check::ProcessInfo>,
     pub gpu_data: hardware_checker::GpuData,
     pub window_size: (f32, f32),
     pub window_position: Option<(i32, i32)>,
@@ -75,7 +87,7 @@ impl Default for State {
             total_usages: vec![0.0; crate::HISTORY_SIZE],
 
             // Process monitoring starts empty
-            processes_history: HashMap::new(),
+            top_processes: Vec::new(),
 
             // GPU data starts empty
             gpu_data: hardware_checker::GpuData {
@@ -135,17 +147,7 @@ impl State {
 
             // Update process monitoring data
             Message::UpdateProcesses(processes) => {
-                // Update CPU usage history for each process
-                for process in processes {
-                    let entry = self
-                        .processes_history
-                        .entry(process.name) // Get or create entry for this process
-                        .or_default();
-                    entry.push(process.cpu_usage); // Add current usage
-                    if entry.len() > crate::HISTORY_SIZE {
-                        entry.remove(0); // Remove oldest if too many entries
-                    }
-                }
+                self.top_processes = processes;
                 iced::Task::none()
             }
 
@@ -426,7 +428,7 @@ impl State {
             // Get usage history for this core
             let history = self.core_usages[i].clone();
             // Create row with label and chart
-            let label = text(format!("Core {}", i)).size(13);
+            let label = container(text(format!("Core {}", i)).size(13)).width(Length::Fixed(60.0)).align_x(iced::alignment::Horizontal::Left);
             let chart = container(
                 canvas::Canvas::new(crate::canvas::BarChartProgram { history })
                     .width(Length::Fill)
@@ -524,23 +526,10 @@ impl State {
             ..Default::default()
         });
 
-        let mut averages: Vec<(String, f32)> = self
-            .processes_history
-            .iter()
-            .filter_map(|(name, usages)| {
-                if usages.is_empty() {
-                    None
-                } else {
-                    let avg = usages.iter().sum::<f32>() / usages.len() as f32;
-                    Some((name.clone(), avg))
-                }
-            })
-            .collect();
-        averages.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-        let top3 = averages.into_iter().take(3).collect::<Vec<_>>();
+        let top_processes: Vec<String> = self.top_processes.iter().take(4).map(|p| p.name.clone()).collect();
 
         let mut process_columns = vec![];
-        for (i, (name, _)) in top3.iter().enumerate() {
+        for (i, name) in top_processes.iter().enumerate() {
             let label = format!("{}. {}", i + 1, name);
             let col = container(
                 text(label)

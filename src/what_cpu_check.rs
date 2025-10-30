@@ -4,12 +4,18 @@
 use sysinfo::System;
 use windows::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, HKEY_LOCAL_MACHINE, KEY_READ};
 
+
+
 /// Information about a running process and its CPU usage
 #[derive(Debug, Clone)]
 pub struct ProcessInfo {
     /// The name of the process (usually the executable name)
     pub name: String,
+    /// The description of the process (from file properties)
+    #[allow(dead_code)]
+    pub description: String,
     /// Current CPU usage percentage for this process
+    #[allow(dead_code)]
     pub cpu_usage: f32,
 }
 
@@ -96,18 +102,6 @@ pub async fn get_thread_usages() -> Vec<f32> {
     usages
 }
 
-pub async fn get_top_processes() -> Vec<ProcessInfo> {
-    let mut sys = System::new_all();
-    sys.refresh_processes();
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    sys.refresh_processes();
-    let mut processes: Vec<ProcessInfo> = sys
-        .processes().values().map(|process| ProcessInfo {
-            name: process.name().to_string(),
-            cpu_usage: process.cpu_usage(),
-        })
-        .collect();
-    processes.sort_by(|a, b| b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap());
-    processes.truncate(10);
-    processes
-}
+
+
+

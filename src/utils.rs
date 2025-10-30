@@ -49,9 +49,9 @@ pub fn save_window_position(x: i32, y: i32) {
         let subkey = windows::core::PCWSTR::from_raw("Software\\Cutemonitor\0".encode_utf16().collect::<Vec<_>>().as_ptr());
         if RegCreateKeyExW(HKEY_CURRENT_USER, subkey, 0, windows::core::PCWSTR::null(), REG_OPTION_NON_VOLATILE, KEY_WRITE, None, &mut key, None).is_ok() {
             let value_name = windows::core::PCWSTR::from_raw("WindowPosition\0".encode_utf16().collect::<Vec<_>>().as_ptr());
-            let data = format!("{},{}", x, y);
-            let data_bytes = data.as_bytes();
-            let _ = RegSetValueExW(key, value_name, 0, REG_SZ, Some(data_bytes));
+            let data_utf16: Vec<u16> = format!("{},{}", x, y).encode_utf16().chain(std::iter::once(0)).collect();
+            let data_slice = std::slice::from_raw_parts(data_utf16.as_ptr() as *const u8, data_utf16.len() * 2);
+            let _ = RegSetValueExW(key, value_name, 0, REG_SZ, Some(data_slice));
             let _ = RegCloseKey(key);
         }
     }
@@ -66,9 +66,9 @@ pub fn load_window_position() -> Option<(i32, i32)> {
             let mut data_type: REG_VALUE_TYPE = REG_VALUE_TYPE::default();
             let mut data_size: u32 = 0;
             if RegQueryValueExW(key, value_name, None, Some(&mut data_type), None, Some(&mut data_size)).is_ok() && data_type == REG_SZ {
-                let mut buffer = vec![0u8; data_size as usize];
-                if RegQueryValueExW(key, value_name, None, Some(&mut data_type), Some(buffer.as_mut_ptr()), Some(&mut data_size)).is_ok() {
-                    if let Ok(s) = String::from_utf8(buffer[..(data_size as usize).saturating_sub(2)].to_vec()) { // -2 for null terminator
+                let mut buffer = vec![0u16; (data_size / 2) as usize];
+                if RegQueryValueExW(key, value_name, None, Some(&mut data_type), Some(buffer.as_mut_ptr() as *mut u8), Some(&mut data_size)).is_ok() {
+                    if let Ok(s) = String::from_utf16(&buffer[..((data_size / 2) as usize).saturating_sub(1)]) { // -1 for null terminator
                         if let Some((x_str, y_str)) = s.split_once(',') {
                             if let (Ok(x), Ok(y)) = (x_str.parse::<i32>(), y_str.parse::<i32>()) {
                                 let _ = RegCloseKey(key);

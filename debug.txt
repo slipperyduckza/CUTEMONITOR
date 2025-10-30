@@ -1,0 +1,18 @@
+[
+    {
+        "Name":  "rustdesk",
+        "CPU":  0
+    },
+    {
+        "Name":  "rust-analyzer-proc-macro-srv",
+        "CPU":  0
+    },
+    {
+        "Name":  "steam",
+        "CPU":  0
+    },
+    {
+        "Name":  "syncthing",
+        "CPU":  0
+    }
+]

@@ -34,6 +34,7 @@ mod styles; // UI styling functions
 mod subscriptions; // Asynchronous data streams
 mod utils; // Utility functions
 mod what_cpu_check; // CPU information detection
+mod user_process_fetch; // User process monitoring
 
 // Constants for easy configuration - these can be changed to customize the app
 pub const HISTORY_SIZE: usize = 30; // How many past CPU readings to keep in memory
@@ -47,8 +48,8 @@ pub fn main() -> iced::Result {
         unsafe {
             MessageBoxA(
                 HWND::default(), // Default window handle
-                PCSTR::from_raw(b"This program requires administrator privileges.\0".as_ptr() as *const u8), // Message text
-                PCSTR::from_raw(b"Administrator Required\0".as_ptr() as *const u8), // Window title
+                PCSTR::from_raw(c"This program requires administrator privileges.".as_ptr() as *const u8), // Message text
+                PCSTR::from_raw(c"Administrator Required".as_ptr() as *const u8), // Window title
                 MB_ICONERROR, // Error icon
             );
         }
@@ -72,11 +73,14 @@ pub fn main() -> iced::Result {
         icon::from_rgba(rgba, width, height).unwrap()
     };
 
+    // Start collecting user process data
+    crate::user_process_fetch::start_collection();
+
     // Load saved window position
     let saved_position = crate::utils::load_window_position();
 
     // Create and run the Iced application
-    iced::application("LibreHardware Prototype", State::update, State::view)
+    iced::application("CuteMonitor", State::update, State::view)
         .subscription(State::subscription) // Set up data subscriptions
         .window(iced::window::Settings {
             icon: Some(icon), // Set the window icon

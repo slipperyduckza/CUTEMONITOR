@@ -1,6 +1,6 @@
 [package]
 name = "cutemonitor"
-version = "0.3.2"
+version = "0.3.4"
 edition = "2021"
 
 [build-dependencies]
@@ -11,10 +11,11 @@ iced = { version = "=0.13.1", features = ["advanced", "image", "canvas", "tokio"
 iced_futures = "=0.13.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-windows = { version = "0.52", features = ["Win32_System_Threading", "Win32_Security", "Win32_System_Console", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Foundation", "Win32_System_Registry"] }
+windows = { version = "0.52", features = ["Win32_System_Threading", "Win32_Security", "Win32_System_Console", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Foundation", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_Storage_FileSystem"] }
 sysinfo = "0.30"
 tokio = { version = "1", features = ["full"] }
 machine-info = "1.0.9"
 ico = "0.3"
+lazy_static = "1.4"
 
 

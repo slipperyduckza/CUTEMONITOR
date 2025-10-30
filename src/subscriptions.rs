@@ -3,6 +3,7 @@ use iced::futures::stream::{self, BoxStream};
 use iced_futures::subscription::Event;
 
 use crate::what_cpu_check;
+use crate::user_process_fetch;
 
 // Recipe for CPU threads monitoring subscription
 pub struct CpuThreadsMonitor;
@@ -45,10 +46,17 @@ impl Recipe for ProcessesMonitor {
         _input: BoxStream<'static, Event>,
     ) -> BoxStream<'static, Self::Output> {
         let stream = stream::unfold((), |()| async {
-            // Update every 500ms (same as threads)
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            // Get the top processes by CPU usage
-            let processes = what_cpu_check::get_top_processes().await;
+            // Update every 2000ms
+            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+            // Get the top user processes by CPU usage
+            let top_processes = user_process_fetch::get_top_processes();
+            let processes: Vec<what_cpu_check::ProcessInfo> = top_processes.into_iter().map(|(name, description, cpu_usage)| {
+                what_cpu_check::ProcessInfo {
+                    name,
+                    description,
+                    cpu_usage: cpu_usage as f32,
+                }
+            }).collect();
             Some((crate::state::Message::UpdateProcesses(processes), ()))
         });
         Box::pin(stream)
