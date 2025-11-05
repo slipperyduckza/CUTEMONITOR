@@ -20,10 +20,7 @@ static AMD_LOGO: &[u8] = include_bytes!("../AMD256.png");
 static INTEL_LOGO: &[u8] = include_bytes!("../INTEL256.png");
 static VM_LOGO: &[u8] = include_bytes!("../VM_PC256.png"); // For virtual machines
 
-// GPU manufacturer logos
-static NVIDIA_LOGO: &[u8] = include_bytes!("../Nvidia_GeForce_256.png");
-static AMD_GPU_LOGO: &[u8] = include_bytes!("../AMD_Radeon_256.png");
-static INTEL_GPU_LOGO: &[u8] = include_bytes!("../Intel_Arc_256.png");
+
 
 // Declare our modules - these contain the actual implementation
 mod canvas; // Canvas drawing programs for charts
@@ -35,6 +32,21 @@ mod subscriptions; // Asynchronous data streams
 mod utils; // Utility functions
 mod what_cpu_check; // CPU information detection
 mod user_process_fetch; // User process monitoring
+
+// GPU monitoring modules from prototype
+mod gpu_data;
+mod gpu_data_nvidia;
+mod gpu_data_amd;
+mod gpu_data_virtual;
+mod amd_version_detector;
+mod amd_gpu_monitor;
+mod gpu_gui;
+mod gpu_hardware_checker;
+mod gpu_monitor_manager;
+mod launch_gpu_detect;
+mod gpu_interrogate;
+mod gpu_assets;
+mod embedded_dlls;
 
 // Constants for easy configuration - these can be changed to customize the app
 pub const HISTORY_SIZE: usize = 30; // How many past CPU readings to keep in memory
@@ -73,6 +85,17 @@ pub fn main() -> iced::Result {
         icon::from_rgba(rgba, width, height).unwrap()
     };
 
+    // Extract embedded DLLs for GPU monitoring
+    match extract_embedded_dlls() {
+        Ok(_) => {
+            println!("Embedded DLLs extracted successfully");
+        }
+        Err(e) => {
+            eprintln!("Failed to extract embedded DLLs: {}", e);
+            // Continue without GPU monitoring if DLL extraction fails
+        }
+    }
+
     // Start collecting user process data
     crate::user_process_fetch::start_collection();
 
@@ -89,4 +112,14 @@ pub fn main() -> iced::Result {
             ..Default::default() // Use default settings for everything else
         })
         .run() // Start the application event loop
+}
+
+fn extract_embedded_dlls() -> anyhow::Result<()> {
+    let embedded_dlls = embedded_dlls::EmbeddedDlls::new()?;
+    embedded_dlls.extract_dlls()?;
+    
+    // Keep the embedded DLLs alive for the duration of the program
+    std::mem::forget(embedded_dlls);
+    
+    Ok(())
 }

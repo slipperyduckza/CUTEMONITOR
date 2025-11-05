@@ -1,12 +1,11 @@
 //! Hardware monitoring module for Cutemonitor.
 //!
 //! This module handles collecting hardware data from the system, including CPU temperatures,
-//! voltages, memory usage, and GPU information. It uses LibreHardwareMonitor (via a C# executable)
-//! for detailed CPU and motherboard data, and the machine_info crate for GPU data.
+//! voltages, and memory usage. It uses LibreHardwareMonitor (via a C# executable)
+//! for detailed CPU and motherboard data.
 
 use iced_futures::futures::future;
 use iced_futures::stream;
-use machine_info::Machine;
 use serde::Deserialize;
 use std::io::BufRead;
 use std::path::PathBuf;
@@ -129,75 +128,4 @@ fn extract_resources() -> PathBuf {
     temp_dir
 }
 
-/// GPU data collected using the machine_info crate.
-/// This struct holds information about the primary GPU, including model, memory, temperature,
-/// and utilization metrics.
-#[derive(Debug, Clone)]
-pub struct GpuData {
-    /// GPU model name (e.g., "NVIDIA GeForce RTX 3080").
-    pub model: String,
-    /// Total VRAM in megabytes.
-    pub vram_mb: u64,
-    /// GPU temperature in Celsius (if available).
-    pub temp: Option<f32>,
-    /// GPU utilization as a percentage (0-100, if available).
-    pub utilization: Option<f32>,
-    /// VRAM usage as a percentage (0-100, if available).
-    pub memory_usage: Option<f32>,
-    /// Video encoder utilization as a percentage (0-100, if available).
-    pub encoder: Option<f32>,
-    /// Video decoder utilization as a percentage (0-100, if available).
-    pub decoder: Option<f32>,
-}
 
-/// Retrieves current GPU data using the machine_info crate.
-/// This function queries the system's graphics information and returns data for the primary GPU.
-/// If no GPU is detected, it returns a placeholder GpuData with "No GPU detected".
-pub fn get_gpu_data() -> GpuData {
-    let mut machine = Machine::new();
-    let sys_info = machine.system_info();
-    let graphics_cards = &sys_info.graphics;
-
-    if graphics_cards.is_empty() {
-        return GpuData {
-            model: "No GPU detected".to_string(),
-            vram_mb: 0,
-            temp: None,
-            utilization: None,
-            memory_usage: None,
-            encoder: None,
-            decoder: None,
-        };
-    }
-
-    let card = &graphics_cards[0];
-    let graphics_status = machine.graphics_status();
-    let usage = graphics_status.first();
-
-    GpuData {
-        model: card.name.clone(),
-        vram_mb: card.memory / 1_048_576, // Convert bytes to MiB
-        temp: usage
-            .map(|u| u.temperature as f32)
-            .or(Some(card.temperature as f32)), // Fallback to static temp if dynamic unavailable
-        utilization: usage.map(|u| u.gpu as f32),
-        memory_usage: usage.map(|u| u.memory_usage as f32),
-        encoder: usage.map(|u| u.encoder as f32),
-        decoder: usage.map(|u| u.decoder as f32),
-    }
-}
-
-/// Creates an iced subscription that streams GPU data periodically.
-/// This function polls GPU information every second using get_gpu_data() and sends
-/// the data to the iced application for real-time updates.
-pub fn gpu_data_stream() -> iced::Subscription<GpuData> {
-    let stream = stream::channel(100000, |mut sender| async move {
-        loop {
-            let data = get_gpu_data();
-            let _ = sender.try_send(data);
-            // Update every 1 second to balance responsiveness and performance.
-            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        }
-    });
-    iced::Subscription::run_with_id("gpu", stream)
-}

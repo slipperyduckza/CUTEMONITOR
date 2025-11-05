@@ -4,6 +4,8 @@ use crate::hardware_checker;
 // The State struct holds all the data needed to render the UI
 
 use crate::what_cpu_check;
+use crate::gpu_data;
+use crate::gpu_gui;
 
 /// Messages that can be sent to update the application state
 /// Messages that can be sent to update the application state
@@ -19,7 +21,8 @@ pub enum Message {
     /// Update the list of top user processes
     UpdateProcesses(Vec<what_cpu_check::ProcessInfo>),
     /// Update GPU information
-    UpdateGpu(hardware_checker::GpuData),
+    UpdateMultipleGpus(Vec<gpu_data::GpuData>),
+
     /// Handle window resize events
     WindowResized((f32, f32)),
     /// Handle other window events
@@ -42,12 +45,14 @@ pub struct State {
     pub cpu_model: String,
     pub cpu_cores: usize,
     pub cpu_threads: usize,
-    pub is_vm: bool,
+    
     pub core_usages: Vec<Vec<f32>>,
     pub thread_usages: Vec<Vec<f32>>,
     pub total_usages: Vec<f32>,
     pub top_processes: Vec<what_cpu_check::ProcessInfo>,
-    pub gpu_data: hardware_checker::GpuData,
+
+    pub gpu_monitor: gpu_gui::GpuMonitor,
+
     pub window_size: (f32, f32),
     pub window_position: Option<(i32, i32)>,
 }
@@ -57,7 +62,6 @@ impl Default for State {
     fn default() -> Self {
         // Get CPU information at startup
         let cpu_info = what_cpu_check::get_cpu_info();
-        let is_vm = what_cpu_check::is_virtual_machine();
 
         Self {
             // Initialize hardware data as empty/zero (will be filled by subscriptions)
@@ -76,7 +80,6 @@ impl Default for State {
             cpu_model: cpu_info.model,
             cpu_cores: cpu_info.cores,
             cpu_threads: cpu_info.threads,
-            is_vm,
 
             // Initialize usage history buffers
             // Each core gets its own history buffer, pre-filled with 10% usage
@@ -89,16 +92,8 @@ impl Default for State {
             // Process monitoring starts empty
             top_processes: Vec::new(),
 
-            // GPU data starts empty
-            gpu_data: hardware_checker::GpuData {
-                model: String::new(),
-                vram_mb: 0,
-                temp: None,
-                utilization: None,
-                memory_usage: None,
-                encoder: None,
-                decoder: None,
-            },
+            // GPU monitor
+            gpu_monitor: gpu_gui::GpuMonitor::default(),
 
             // Default window size
             window_size: (800.0, 600.0),
@@ -152,8 +147,8 @@ impl State {
             }
 
             // Update GPU monitoring data
-            Message::UpdateGpu(data) => {
-                self.gpu_data = data; // Store the new GPU data
+            Message::UpdateMultipleGpus(data_list) => {
+                self.gpu_monitor.update_multiple_gpu_data(data_list);
                 iced::Task::none()
             }
 
@@ -174,6 +169,8 @@ impl State {
             }
         }
     }
+
+
 
     pub fn view(&self) -> iced::Element<'_, Message> {
         use iced::widget::{canvas, column, container, image, row, text};
@@ -340,39 +337,8 @@ impl State {
             ..Default::default()
         })
         .padding(6)
-        .width(Length::FillPortion(50))
-        .height(Length::Fill);
-
-        let logo = image::Image::new(crate::Handle::from_bytes(if self.is_vm {
-            crate::VM_LOGO
-        } else if self.cpu_model.to_lowercase().contains("amd") {
-            crate::AMD_LOGO
-        } else {
-            crate::INTEL_LOGO
-        }))
-        .width(128)
-        .height(128);
-
-        let logo_container = container(
-            container(logo)
-                .align_x(iced::alignment::Horizontal::Center)
-                .align_y(iced::alignment::Vertical::Center)
-                .width(Length::Fill)
-                .height(Length::Fill),
-        )
-        .style(|_theme| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                0.3, 0.3, 0.3,
-            ))),
-            border: iced::Border {
-                radius: 10.0.into(),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .padding(6)
-        .width(Length::FillPortion(20))
-        .height(Length::Fill);
+        .width(Length::FillPortion(35))
+        .height(Length::Fixed(190.0));
 
         let model_container = container(
             container(
@@ -405,6 +371,39 @@ impl State {
         .height(Length::Fixed(100.0));
 
         let hardware_container = hardware_info;
+
+        let cpu_logo = image::Image::new(crate::Handle::from_bytes(
+            if self.cpu_model.to_lowercase().contains("amd") {
+                crate::AMD_LOGO
+            } else if self.cpu_model.to_lowercase().contains("intel") {
+                crate::INTEL_LOGO
+            } else {
+                crate::VM_LOGO
+            },
+        ))
+        .width(128)
+        .height(128);
+
+        let logo_container = container(
+            container(cpu_logo)
+                .align_x(iced::alignment::Horizontal::Center)
+                .align_y(iced::alignment::Vertical::Center)
+                .width(Length::Fill)
+                .height(Length::Fixed(122.0)),
+        )
+        .style(|_theme| container::Style {
+            background: Some(iced::Background::Color(iced::Color::from_rgb(
+                0.3, 0.3, 0.3,
+            ))),
+            border: iced::Border {
+                radius: 10.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .padding(6)
+        .width(Length::FillPortion(14))
+        .height(Length::Fixed(190.0));
 
         let top_container = container(row![logo_container, model_container, hardware_container])
             .style(|_theme| container::Style {
@@ -585,212 +584,14 @@ impl State {
                 ..Default::default()
             });
 
-        let gpu_logo = image::Image::new(crate::Handle::from_bytes(
-            if self.gpu_data.model.to_lowercase().contains("nvidia") {
-                crate::NVIDIA_LOGO
-            } else if self.gpu_data.model.to_lowercase().contains("amd") {
-                crate::AMD_GPU_LOGO
-            } else if self.gpu_data.model.to_lowercase().contains("intel") {
-                crate::INTEL_GPU_LOGO
-            } else {
-                crate::VM_LOGO
-            },
-        ))
-        .width(128)
-        .height(128);
 
-        let gpu_logo_container = container(
-            container(gpu_logo)
-                .align_x(iced::alignment::Horizontal::Center)
-                .align_y(iced::alignment::Vertical::Center)
-                .width(Length::Fill)
-                .height(Length::Fill),
-        )
-        .style(|_theme| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                0.3, 0.3, 0.3,
-            ))),
-            border: iced::Border {
-                radius: 10.0.into(),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .padding(6)
-        .width(Length::FillPortion(20))
-        .height(Length::Fill);
-
-        let gpu_model_container = container(
-            container(
-                column![
-                    text(format!("GPU Model: {}", self.gpu_data.model)).size(13),
-                    text(format!("VRAM: {} MB", self.gpu_data.vram_mb)).size(13),
-                ]
-                .spacing(1),
-            )
-            .align_x(iced::alignment::Horizontal::Left)
-            .align_y(iced::alignment::Vertical::Center)
-            .width(Length::Fill)
-            .height(Length::Fill),
-        )
-        .style(|_theme| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                50.0 / 255.0,
-                50.0 / 255.0,
-                50.0 / 255.0,
-            ))),
-            border: iced::Border {
-                radius: 0.0.into(),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .padding(6)
-        .width(Length::FillPortion(30))
-        .height(Length::Fill)
-        .align_y(iced::alignment::Vertical::Center)
-        .padding(10);
-
-        let gpu_util_row = if let Some(util) = self.gpu_data.utilization {
-            row![
-                text("GPU Utilization:").size(13),
-                container(text(format!("{:.1}%", util)).size(13).color(crate::data_colouring::utilization_color(util)))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        } else {
-            row![
-                text("GPU Utilization:").size(13),
-                container(text("N/A").size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        };
-        let gpu_mem_row = if let Some(mem) = self.gpu_data.memory_usage {
-            row![
-                text("Memory Utilized:").size(13),
-                container(text(format!("{:.1}%", mem)).size(13).color(crate::data_colouring::memory_color(mem)))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        } else {
-            row![
-                text("Memory Utilized:").size(13),
-                container(text("N/A").size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        };
-        let gpu_mem_usage_row = if let Some(mem) = self.gpu_data.memory_usage {
-            let used_mb = (mem / 100.0) * self.gpu_data.vram_mb as f32;
-            row![
-                text("Memory Usage:").size(13),
-                container(text(format!("{:.0} MB", used_mb)).size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        } else {
-            row![
-                text("Memory Usage:").size(13),
-                container(text("N/A").size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        };
-        let gpu_temp_row = if let Some(temp) = self.gpu_data.temp {
-            row![
-                text("Temperature:").size(13),
-                container(text(format!("{:.1}°C", temp)).size(13).color(crate::data_colouring::temperature_color(temp)))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        } else {
-            row![
-                text("Temperature:").size(13),
-                container(text("N/A").size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        };
-        let gpu_encoder_row = if let Some(enc) = self.gpu_data.encoder {
-            row![
-                text("GPU Encoder:").size(13),
-                container(text(format!("{:.1}%", enc)).size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        } else {
-            row![
-                text("GPU Encoder:").size(13),
-                container(text("N/A").size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        };
-        let gpu_decoder_row = if let Some(dec) = self.gpu_data.decoder {
-            row![
-                text("GPU Decoder:").size(13),
-                container(text(format!("{:.1}%", dec)).size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        } else {
-            row![
-                text("GPU Decoder:").size(13),
-                container(text("N/A").size(13))
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .width(Length::Fill)
-            ].width(Length::Fill)
-        };
-
-        let gpu_monitor_container =
-            container(
-                column![
-                    text("GPU INFORMATION").size(17),
-                    column![gpu_util_row, gpu_mem_row, gpu_mem_usage_row, gpu_temp_row, gpu_encoder_row, gpu_decoder_row].spacing(1)
-                ]
-                .spacing(5)
-            )
-                .style(|_theme| container::Style {
-                    background: Some(iced::Background::Color(iced::Color::from_rgb(
-                        0.3, 0.3, 0.3,
-                    ))),
-                    border: iced::Border {
-                        radius: 10.0.into(),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                })
-                .padding(10)
-                .width(Length::FillPortion(50))
-                .height(Length::Shrink);
-
-        let gfx_monitor_container = container(row![
-            gpu_logo_container,
-            gpu_model_container,
-            gpu_monitor_container
-        ])
-        .style(|_theme| container::Style {
-            background: Some(iced::Background::Color(iced::Color::from_rgb(
-                50.0 / 255.0,
-                50.0 / 255.0,
-                50.0 / 255.0,
-            ))),
-            border: iced::Border {
-                radius: 0.0.into(),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .padding(6)
-        .height(Length::Fixed(200.0));
 
         container(
             column![
                 top_container,
                 mid_container,
                 bot_container,
-                gfx_monitor_container
+                self.gpu_monitor.create_all_gpu_containers()
             ]
             .spacing(0),
         )
@@ -803,7 +604,8 @@ impl State {
             iced_futures::subscription::from_recipe(crate::subscriptions::CpuCoresMonitor),
             iced_futures::subscription::from_recipe(crate::subscriptions::CpuThreadsMonitor),
             iced_futures::subscription::from_recipe(crate::subscriptions::ProcessesMonitor),
-            crate::hardware_checker::gpu_data_stream().map(Message::UpdateGpu),
+            crate::gpu_hardware_checker::multi_gpu_data_stream().map(Message::UpdateMultipleGpus),
+
             iced::window::resize_events()
                 .map(|(_id, size)| Message::WindowResized((size.width, size.height))),
             iced::window::events().map(|(_id, event)| Message::WindowEvent(event)),

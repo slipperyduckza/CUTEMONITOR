@@ -4,8 +4,8 @@ fn main() {
         res.set("FileDescription", "CuteMonitor");
         res.set("ProductName", "CuteMonitor");
         res.set("CompanyName", "SlipperyduckZA");
-        res.set_version_info(winresource::VersionInfo::FILEVERSION, 0x0000000000010000);
-        res.set_version_info(winresource::VersionInfo::PRODUCTVERSION, 0x0000000000010000);
+        res.set_version_info(winresource::VersionInfo::FILEVERSION, 0x0000000000030005);
+        res.set_version_info(winresource::VersionInfo::PRODUCTVERSION, 0x0000000000030005);
         res.set_icon("cutemonitor.ico");
         res.set_manifest(
             r#"

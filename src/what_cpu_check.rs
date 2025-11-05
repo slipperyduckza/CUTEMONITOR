@@ -51,6 +51,7 @@ pub fn get_cpu_info() -> CpuInfo {
 /// Checks if the system is running in a virtual machine
 /// This affects which CPU logo to display in the UI
 /// Returns true if running in a VM, false for bare metal
+#[allow(dead_code)]
 pub fn is_virtual_machine() -> bool {
     // Check CPU brand for common virtualization signatures
     let mut sys = System::new();
