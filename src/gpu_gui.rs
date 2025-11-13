@@ -85,7 +85,7 @@ impl GpuMonitor {
             .collect();
 
         // Arrange all GPU containers in a vertical column with spacing
-        column(gpu_containers).spacing(10).into()
+        column(gpu_containers).spacing(0).into()
     }
 
 
@@ -172,8 +172,8 @@ impl GpuMonitor {
             },
             ..Default::default()
         })
-        .padding(6)  // Small padding around content
-        .height(Length::Fixed(200.0));  // Fixed height for consistency
+        .padding(0)  // No padding around content
+        .height(Length::Fixed(120.0));  // Reduced height for tighter layout
 
         gfx_monitor_container.into()
     }

@@ -6,6 +6,7 @@ use crate::hardware_checker;
 use crate::what_cpu_check;
 use crate::gpu_data;
 use crate::gpu_gui;
+use crate::bandwidth;
 
 /// Messages that can be sent to update the application state
 /// Messages that can be sent to update the application state
@@ -22,6 +23,8 @@ pub enum Message {
     UpdateProcesses(Vec<what_cpu_check::ProcessInfo>),
     /// Update GPU information
     UpdateMultipleGpus(Vec<gpu_data::GpuData>),
+    /// Update bandwidth monitoring
+    BandwidthMessage(bandwidth::Message),
 
     /// Handle window resize events
     WindowResized((f32, f32)),
@@ -52,6 +55,7 @@ pub struct State {
     pub top_processes: Vec<what_cpu_check::ProcessInfo>,
 
     pub gpu_monitor: gpu_gui::GpuMonitor,
+    pub bandwidth_monitor: bandwidth::BandwidthGraph,
 
     pub window_size: (f32, f32),
     pub window_position: Option<(i32, i32)>,
@@ -94,6 +98,8 @@ impl Default for State {
 
             // GPU monitor
             gpu_monitor: gpu_gui::GpuMonitor::default(),
+            // Bandwidth monitor
+            bandwidth_monitor: bandwidth::BandwidthGraph::new(),
 
             // Default window size
             window_size: (800.0, 600.0),
@@ -152,10 +158,16 @@ impl State {
                 iced::Task::none()
             }
 
+            // Update bandwidth monitoring data
+            Message::BandwidthMessage(bandwidth_msg) => {
+                self.bandwidth_monitor.update(bandwidth_msg).map(Message::BandwidthMessage)
+            }
+
             // Handle window resize events
             Message::WindowResized(size) => {
                 self.window_size = size; // Update stored window size
-                iced::Task::none()
+                // Trigger bandwidth redraw on resize to fix canvas initial rendering issue
+                self.bandwidth_monitor.update(bandwidth::Message::Tick).map(Message::BandwidthMessage)
             }
             Message::WindowEvent(event) => {
                 if let iced::window::Event::Moved(point) = event {
@@ -418,7 +430,7 @@ impl State {
                 },
                 ..Default::default()
             })
-            .padding(6)
+            .padding(4)
             .height(Length::Fixed(200.0));
 
         // Create the CPU cores section
@@ -441,7 +453,7 @@ impl State {
 
         let graph_core_container = container(cores_column_inner)
             .style(crate::styles::black_filled_box)
-            .padding(10)
+            .padding([4.0, 10.0])
             .width(Length::FillPortion(65));
 
         // Create the CPU threads section
@@ -472,7 +484,7 @@ impl State {
         let threads_column_inner = column(threads_elements).spacing(1.0);
         let graph_threads_container = container(threads_column_inner)
             .style(crate::styles::black_filled_box)
-            .padding(10)
+            .padding([4.0, 10.0])
             .width(Length::FillPortion(35));
 
         // Create the total CPU usage section
@@ -499,7 +511,7 @@ impl State {
             .align_y(iced::Alignment::Center);
         let graph_total_container = container(total_row)
             .style(crate::styles::black_filled_box)
-            .padding(10)
+            .padding([4.0, 10.0])
             .width(Length::Fill);
 
         let mid_container = container(
@@ -507,9 +519,9 @@ impl State {
                 row![graph_core_container, graph_threads_container].spacing(0),
                 graph_total_container
             ]
-            .spacing(10),
+            .spacing(4),
         )
-        .padding(6)
+        .padding(4)
         .width(Length::Fill)
         .height(Length::Shrink)
         .style(|_theme| container::Style {
@@ -549,9 +561,9 @@ impl State {
         let userprocess_container = container(
             column![
                 text("TOP USER PROCESSES:").size(13),
-                row(process_columns).spacing(10)
+                row(process_columns).spacing(4)
             ]
-            .spacing(5),
+            .spacing(4),
         )
         .style(|_theme| container::Style {
             background: Some(iced::Background::Color(iced::Color::from_rgb(
@@ -567,8 +579,22 @@ impl State {
         .width(Length::Fill)
         .height(Length::Shrink);
 
-        let bot_container = container(userprocess_container)
-            .padding(6)
+        let bandwidth_view = self.bandwidth_monitor.view().map(Message::BandwidthMessage);
+        
+        let bot_container = container(
+            column![
+                userprocess_container,
+                row![
+                    container(bandwidth_view)
+                        .height(iced::Length::Fixed(48.0))
+                        .width(iced::Length::Fill)
+                ]
+                .spacing(4),
+                self.gpu_monitor.create_all_gpu_containers()
+            ]
+            .spacing(6)
+        )
+            .padding(8)
             .width(Length::Fill)
             .height(Length::Shrink)
             .style(|_theme| container::Style {
@@ -590,12 +616,11 @@ impl State {
             column![
                 top_container,
                 mid_container,
-                bot_container,
-                self.gpu_monitor.create_all_gpu_containers()
+                bot_container
             ]
             .spacing(0),
         )
-        .into()
+            .into()
     }
 
     pub fn subscription(&self) -> iced::Subscription<Message> {
@@ -605,6 +630,7 @@ impl State {
             iced_futures::subscription::from_recipe(crate::subscriptions::CpuThreadsMonitor),
             iced_futures::subscription::from_recipe(crate::subscriptions::ProcessesMonitor),
             crate::gpu_hardware_checker::multi_gpu_data_stream().map(Message::UpdateMultipleGpus),
+            self.bandwidth_monitor.subscription().map(Message::BandwidthMessage),
 
             iced::window::resize_events()
                 .map(|(_id, size)| Message::WindowResized((size.width, size.height))),
