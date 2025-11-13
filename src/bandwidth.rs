@@ -4,7 +4,7 @@ use iced::{Color, Point, Theme, Rectangle, Element, Task, Size};
 use iced::widget::{container, column, row, text, Canvas};
 use std::time::Duration;
 
-const BANDWIDTH_GRAPH_HEIGHT: f64 = 10.0; // 10 Mbps scale for graph (values are now in Mbps)
+const BANDWIDTH_GRAPH_HEIGHT: f64 = 1000.0; // 1 Gbps scale for graph (values are now in Mbps)
 const GRAPH_POINTS: usize = 80;
 
 // Layout constants
