@@ -1,15 +1,15 @@
 use crate::interface_stats;
-use iced::widget::canvas::{self, Path, Frame, LineCap, Geometry};
+use iced::widget::canvas::{self, Path, Frame, LineCap, LineJoin, Geometry};
 use iced::{Color, Point, Theme, Rectangle, Element, Task, Size};
 use iced::widget::{container, column, row, text, Canvas};
 use std::time::Duration;
 
-const BANDWIDTH_GRAPH_HEIGHT: f64 = 10.0; // 10 Mbps scale for graph (values are now in Mbps)
-const GRAPH_POINTS: usize = 80;
+
+const GRAPH_POINTS: usize = 300;
 
 // Layout constants
-const CANVAS_HEIGHT: f32 = 48.0;
-const CONTAINER_HEIGHT: f32 = 48.0;
+const CANVAS_HEIGHT: f32 = 182.0;
+const CONTAINER_HEIGHT: f32 = 184.0;
 const PADDING_VERTICAL: f32 = 0.0;
 const PADDING_HORIZONTAL: f32 = 10.0;
 const BORDER_RADIUS: f32 = 10.0;
@@ -26,6 +26,9 @@ pub struct BandwidthGraph {
     upload_points: Vec<f64>,
     download_points: Vec<f64>,
     current_stats: Option<interface_stats::NetworkStats>,
+    bandwidth_graph_height: f64,  // Current display height
+    target_height: f64,          // Desired final height
+    scaling_step: u8,            // Current step in transition (0-10)
 }
 
 impl BandwidthGraph {
@@ -34,6 +37,50 @@ impl BandwidthGraph {
             upload_points: vec![0.0; GRAPH_POINTS],
             download_points: vec![0.0; GRAPH_POINTS],
             current_stats: None,
+            bandwidth_graph_height: 1000.0, // Initial default value
+            target_height: 1000.0,          // Initial target matches current
+            scaling_step: 0,                 // No transition in progress
+        }
+    }
+
+    fn recalculate_graph_height(&mut self) {
+        // Find the maximum value in current data points
+        let max_in_data: f64 = self.upload_points.iter()
+            .chain(self.download_points.iter())
+            .fold(0.0_f64, |acc, &val| acc.max(val));
+        
+        // Set minimum threshold to prevent excessive scaling down
+        let min_height = 1.0; // Minimum 1 Mbps scale
+        
+        // Calculate the target height based on current data
+        let new_target = if max_in_data > 0.0 && max_in_data < self.bandwidth_graph_height * 0.7 {
+            max_in_data.max(min_height)
+        } else if max_in_data > self.bandwidth_graph_height {
+            max_in_data
+        } else {
+            self.target_height // No change needed
+        };
+        
+        // Only start a new transition if the target actually changed
+        if (new_target - self.target_height).abs() > 0.1 {
+            self.target_height = new_target;
+            self.scaling_step = 1; // Start transition
+        }
+    }
+
+    fn smooth_scale_update(&mut self) {
+        if self.scaling_step > 0 && self.scaling_step <= 10 {
+            let progress = self.scaling_step as f64 / 10.0;
+            self.bandwidth_graph_height = self.bandwidth_graph_height + 
+                (self.target_height - self.bandwidth_graph_height) * progress;
+            
+            self.scaling_step += 1;
+            
+            // Complete the transition on step 11
+            if self.scaling_step > 10 {
+                self.bandwidth_graph_height = self.target_height;
+                self.scaling_step = 0;
+            }
         }
     }
 
@@ -59,6 +106,12 @@ impl BandwidthGraph {
         } else {
             self.download_points.push(download_mbps);
         }
+        
+        // Recalculate graph height based on current data points
+        self.recalculate_graph_height();
+        
+        // Apply smooth scaling transition
+        self.smooth_scale_update();
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -168,7 +221,7 @@ impl BandwidthGraph {
 
         let bandwidth_container = container(inner_row)
         .width(iced::Length::Fill)
-        .height(iced::Length::Fixed(54.0))
+        .height(iced::Length::Fixed(184.0))
         .padding(4)
         .style(|_theme| container::Style {
             background: Some(Color::from_rgb(0.0, 0.0, 0.0).into()),
@@ -239,7 +292,9 @@ impl BandwidthGraph {
         // Convert points to screen coordinates - both lines start at bottom (y = height)
         let screen_points: Vec<Point> = points.iter().enumerate().map(|(i, &value)| {
             let x = i as f32 * x_step;
-            let normalized_value = (value / BANDWIDTH_GRAPH_HEIGHT).min(1.0).max(0.0);
+            // Add +1.000 to values for graph plotting only
+            let adjusted_value = value + 2.400;
+            let normalized_value = (adjusted_value / self.bandwidth_graph_height).min(1.0).max(0.0);
             // Both lines start at bottom (height) and go up from there
             let y = height - (normalized_value as f32 * height * 0.9); // Use 90% of height to leave some margin at top
             Point::new(x, y)
@@ -275,6 +330,7 @@ impl BandwidthGraph {
             width: LINE_WIDTH,
             style: canvas::Style::Solid(color),
             line_cap: LineCap::Round,
+            line_join: LineJoin::Round,
             ..Default::default()
         };
 
