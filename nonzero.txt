@@ -1,0 +1,9 @@
+fn ensure_min_one(value: f64) -> f64 {
+    // If the input value is not zero, set the minimum to 1.0.
+    // If the input value is zero, it remains zero.
+    if value != 0.0 {
+        value.max(1.0)
+    } else {
+        value
+    }
+}

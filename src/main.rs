@@ -48,6 +48,10 @@ mod gpu_interrogate;
 mod gpu_assets;
 mod embedded_dlls;
 
+// Network bandwidth monitoring modules
+mod interface_stats;
+mod bandwidth;
+
 // Constants for easy configuration - these can be changed to customize the app
 pub const HISTORY_SIZE: usize = 30; // How many past CPU readings to keep in memory
 pub const BAR_HEIGHT: f32 = 24.0; // Height of each progress bar in pixels
@@ -107,7 +111,7 @@ pub fn main() -> iced::Result {
         .subscription(State::subscription) // Set up data subscriptions
         .window(iced::window::Settings {
             icon: Some(icon), // Set the window icon
-            size: (940.0, 860.0).into(), // Set initial window size
+            size: (940.0, 900.0).into(), // Set initial window size
             position: saved_position.map_or(iced::window::Position::default(), |(x, y)| iced::window::Position::Specific(iced::Point::new(x as f32, y as f32))),
             ..Default::default() // Use default settings for everything else
         })

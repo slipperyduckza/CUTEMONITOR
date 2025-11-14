@@ -91,13 +91,13 @@ impl AmdGpuMonitor {
             Ok(Err(e)) => {
                 warn!("Failed to initialize sophisticated AMD GPU monitor: {}", e);
                 self.has_available_monitor = false;
-                info!("✓ AMD GPU monitor initialized with fallback methods only");
+                info!("AMD GPU monitor initialized with fallback methods only");
             }
             // Timeout case: initialization took too long
             Err(_) => {
                 warn!("⏰ AMD GPU monitor initialization timed out after 30 seconds");
                 self.has_available_monitor = false;
-                info!("✓ AMD GPU monitor initialized with fallback methods only (timeout)");
+                info!("AMD GPU monitor initialized with fallback methods only (timeout)");
             }
         }
         
@@ -168,7 +168,7 @@ impl AmdGpuMonitor {
                     warn!("Failed to update metrics for GPU '{}': {}, trying fallback", gpu.name, e);
                     // Try fallback as last resort if the primary method failed
                     if let Err(fallback_err) = self.fallback_update_single_gpu(gpu).await {
-                        error!("💥 AMD GPU: Fallback also failed for GPU '{}': {}", gpu.name, fallback_err);
+                        error!("AMD GPU: Fallback also failed for GPU '{}': {}", gpu.name, fallback_err);
                     } else {
                         debug!("AMD GPU: Fallback succeeded for GPU: {}", gpu.name);
                     }

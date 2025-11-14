@@ -45,7 +45,7 @@ impl LaunchGpuDetector {
         // Check if running in virtual environment first
         let is_virtual = self.vm_detector.is_virtual_environment();
         if is_virtual {
-            println!("✓ Running in virtual environment detected");
+            println!("Running in virtual environment detected");
             let detection_info = self.vm_detector.get_detection_info();
             if detection_info.contains(vm_detect::Detection::HYPERVISOR_BIT) {
                 println!("  - Hypervisor bit detected");
@@ -62,7 +62,7 @@ impl LaunchGpuDetector {
             Ok(mut gpus) => {
                 // Enrich GPU data with virtual GPU information if in VM
                 if is_virtual {
-                    println!("✓ Enriching GPU data with virtual GPU information...");
+                    println!("Enriching GPU data with virtual GPU information...");
                     for gpu in &mut gpus {
                         if let Err(e) = self.vm_detector.enrich_vm_gpu(gpu) {
                             warn!("Failed to enrich GPU {}: {}", gpu.name, e);
@@ -88,13 +88,13 @@ impl LaunchGpuDetector {
 
                 let detection_time = detection_start.elapsed();
                 println!(
-                    "✓ GPU Detection completed in {:.2}ms",
+                    "GPU Detection completed in {:.2}ms",
                     detection_time.as_millis()
                 );
                 gpus
             }
             Err(e) => {
-                eprintln!("✗ Error during GPU detection: {}", e);
+                eprintln!("Error during GPU detection: {}", e);
                 return Err(e);
             }
         };
@@ -128,7 +128,7 @@ impl LaunchGpuDetector {
                 amd_gpu_versions.push((gpu_list.iter().position(|g| std::ptr::eq(g, gpu)).unwrap(), version));
 
                 println!(
-                    "  ✓ AMD GPU {} detected - will use {}",
+                    "  AMD GPU {} detected - will use {}",
                     gpu.name,
                     AmdVersionDetector::get_version_name(version)
                 );

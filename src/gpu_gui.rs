@@ -173,7 +173,7 @@ impl GpuMonitor {
             ..Default::default()
         })
         .padding(0)  // No padding around content
-        .height(Length::Fixed(154.0));  // Reduced height for tighter layout
+        .height(Length::Fixed(160.0));  // Reduced height for tighter layout
 
         gfx_monitor_container.into()
     }

@@ -586,7 +586,7 @@ impl State {
                 userprocess_container,
                 row![
                     container(bandwidth_view)
-                        .height(iced::Length::Fixed(48.0))
+                        .height(iced::Length::Fixed(84.0))
                         .width(iced::Length::Fill)
                 ]
                 .spacing(4),
