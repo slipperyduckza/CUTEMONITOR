@@ -4,7 +4,6 @@ use iced::{Color, Point, Theme, Rectangle, Element, Task, Size};
 use iced::widget::{container, column, row, text, Canvas};
 use std::time::Duration;
 
-
 const GRAPH_POINTS: usize = 300;
 
 // Layout constants
