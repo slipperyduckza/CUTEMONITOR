@@ -48,7 +48,7 @@ A lightweight hardware monitoring application built with Rust and Iced GUI frame
 
 - [Iced](https://github.com/iced-rs/iced) - GUI framework
 - [Sysinfo](https://github.com/GuillaumeGomez/sysinfo) - System information
-- LibreHardwareMonitor - Hardware monitoring library
+- [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) - Hardware monitoring library
 
 ## License
 
