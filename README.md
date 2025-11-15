@@ -53,7 +53,7 @@ A lightweight hardware monitoring application built with Rust and Iced GUI frame
 ## License
 
 CuteMonitor is free and open souce software licensed under MPL 2.0, CPU temperature and Montherboard model information is attained using LibreHardwareMonitor.dll 
-LibreHardwareMonitor is free and open source software licensed under MPL 2.0. Some parts of LibreHardwareMonitor are licensed under different terms, see THIRD-PARTY-LICENSES.
+LibreHardwareMonitor is free and open source software licensed under MPL 2.0. Some parts of LibreHardwareMonitor are licensed under different terms, see [THIRD-PARTY-LICENSES](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/blob/master/THIRD-PARTY-NOTICES.txt).
 
 ## Contributing
 
