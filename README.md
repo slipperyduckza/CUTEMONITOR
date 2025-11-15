@@ -10,7 +10,7 @@ A lightweight hardware monitoring application built with Rust and Iced GUI frame
 - Temperature visualization with color-coded data
 - Historical data charts (30 data points)
 - Manufacturer logos for CPU/GPU identification
-- Windows system tray integration
+- Network Bandwidth autoscale graph and upload/download data
 - Requires administrator privileges for hardware access
 
 ## Requirements
