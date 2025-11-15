@@ -292,7 +292,7 @@ impl BandwidthGraph {
         let screen_points: Vec<Point> = points.iter().enumerate().map(|(i, &value)| {
             let x = i as f32 * x_step;
             // Add +1.000 to values for graph plotting only
-            let adjusted_value = value + 2.400;
+            let adjusted_value = value + 0.100;
             let normalized_value = (adjusted_value / self.bandwidth_graph_height).min(1.0).max(0.0);
             // Both lines start at bottom (height) and go up from there
             let y = height - (normalized_value as f32 * height * 0.9); // Use 90% of height to leave some margin at top
