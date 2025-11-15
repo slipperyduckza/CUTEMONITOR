@@ -21,6 +21,8 @@ A lightweight hardware monitoring application built with Rust and Iced GUI frame
 
 ## Installation
 
+[Download Latest Release](https://github.com/slipperyduckza/CUTEMONITOR/releases/latest)
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/slipperyduckza/CUTEMONITOR.git
