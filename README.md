@@ -2,6 +2,8 @@
 
 A lightweight hardware monitoring application built with Rust and Iced GUI framework. Provides real-time monitoring of CPU, GPU, and system temperatures with visual charts and progress bars.
 
+<img width="800" height="793" alt="CUTEMONITOR" src="https://github.com/user-attachments/assets/fddc9a3d-716a-48ad-9409-b91cf15ff0a4" />
+
 ## Features
 
 - Real-time CPU and GPU monitoring
